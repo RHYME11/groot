@@ -6,6 +6,8 @@
 #include<TH1.h>
 #include<TGraph.h>
 #include<TF1.h>
+#include<THStack.h>
+#include<TCanvas.h>
 
 #include<GGaus.h>
 #include<GPeak.h>
@@ -66,30 +68,38 @@ TH1 *GrabHist(int i)  {
         break;
       }
       j++;
+    } else if(obj->InheritsFrom(THStack::Class())) {
+      hist = ((THStack*)obj)->GetHistogram();
+      break;
     }
   }
   return hist;
 }
+
+
+
 
 TList *GrabHists(TVirtualPad *p) {
   //return all histograms on a canvas or pad. (default is the gPad);
   TList *histList = new TList;
   if(!p) p = gPad;
   if(!p) return histList;
+
   TVirtualPad *current = gPad;
+  //TCanvas *c = p->GetCanvas();
+  
   TIter nextp(p->GetListOfPrimitives());
   while(TObject *obj = nextp()) {
+    //printf("obj->GetName() = %s\n",obj->GetName());
     if(obj->InheritsFrom(TVirtualPad::Class())) {
-      TIter nextp2(((TVirtualPad*)obj)->GetListOfPrimitives());
-      while(TObject *obj2 = nextp2()) {
-        if(obj2->InheritsFrom(TH1::Class())) {
-          histList->Add(obj2);
-        }
-      }
-    } else if(obj->InheritsFrom(TH1::Class())) {
+     TList *temp = GrabHists((TVirtualPad*)obj);
+     TIter nextp2(temp);
+     while(TObject *obj2 = nextp2()) histList->Add(obj2);
+    }else if(obj->InheritsFrom(TH1::Class())) {
       histList->Add(obj);
     }
-  }
+  }  
+  //printf("found %i histograms...\n",histList->GetEntries());
   return histList;
 }
 
