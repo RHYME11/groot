@@ -3,6 +3,7 @@
 #include <utils.h>
 #include <vector>
 
+#include "TQObject.h"
 #include <TROOT.h>
 #include <TVirtualPad.h>
 #include <TObjString.h>
@@ -13,6 +14,8 @@
 #include <TGraph.h>
 #include <TF1.h>
 #include <TList.h>
+#include <TStyle.h>
+#include <TPad.h>
 
 #include <GObjectManager.h>
 #include <GCanvas.h>
@@ -112,7 +115,23 @@ void GListTree::Clicked(TGListTreeItem *item, int btn, unsigned int mask, int x,
   //if(fLastSelected) 
   //  printf("last:    %s\n",fLastSelected->GetText());
 
-  ClearActive(); // clears fSelected.
+  if((mask&kKeyControlMask) && 
+    fLastSelected && 
+    item->GetParent() == fLastSelected->GetParent()) {
+  
+    //item->SetActive(true);
+    //fSelected.push_back(item);
+    //printf("adding to active\n");
+    //printf("fSelected size = %i\n",fSelected.size());
+    for(auto it=fSelected.begin();it!=fSelected.end();it++) 
+      (*it)->SetActive(true);
+
+  } else {
+    ClearActive(); // clears fSelected.
+    //printf("clearing active\n");
+  }
+
+
   if((mask&kKeyShiftMask)  &&
       fLastSelected         && 
       item->GetParent() == fLastSelected->GetParent()) {
@@ -413,8 +432,8 @@ void Histomatic::CreateWindow() {
   fButton2->Connect("Clicked()","Histomatic",this,"buttonAction()");
   fButton3 = new TGTextButton(fButtonRow1,"button3");
   fButton3->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton4 = new TGTextButton(fButtonRow1,"button4");
-  fButton4->Connect("Clicked()","Histomatic",this,"buttonAction()");
+  fButton4 = new TGTextButton(fButtonRow1,"CloseAll");
+  fButton4->Connect("Clicked()","Histomatic",this,"closeAllCanvases()");
   fButtonRow1->AddFrame(fButton1,fLH1);
   fButtonRow1->AddFrame(fButton2,fLH1);
   fButtonRow1->AddFrame(fButton3,fLH1);
@@ -453,10 +472,25 @@ void Histomatic::CreateWindow() {
   fDrawColz = new TGCheckButton(fDrawOptionContainer,"colz",1);
   fDrawColz->SetState(kButtonDown);
 
+  fLockPads = new TGCheckButton(fDrawOptionContainer,"lock pads",1);
+  fLockPads->SetState(kButtonUp);
+  fLockPads->Connect("Clicked()","Histomatic",this,"doLockPads(TPad*)");
+  //Connect("doLockPads()","Histomatic",this,"doLockPads()");
+  //Connect("TCanvas","Picked()",this,"doLockPads()");
+  TQObject::Connect("TCanvas","Picked(TPad*,TObject*,Int_t)","Histomatic",this,"doLockPads(TPad*)");
+  /*
+  Connect (const char *sender_class, 
+           const char *signal, 
+           const char *receiver_class, 
+           void *receiver, c
+           onst char *slot) */
+
+
+
   fDrawOptionContainer->AddFrame(fDrawComboBox,fLH1);
   fDrawOptionContainer->AddFrame(fDrawNormalized,fLH1);
   fDrawOptionContainer->AddFrame(fDrawColz,fLH0);
-
+  fDrawOptionContainer->AddFrame(fLockPads,fLH0);
 
   fGListTreeCanvas = new GListTreeCanvas(fVf,10,10);
   fGListTree = new GListTree(fGListTreeCanvas,this); 
@@ -480,6 +514,40 @@ void Histomatic::CreateWindow() {
   fMainWindow->Resize(fMainWindow->GetDefaultSize());
 
 
+}
+
+void Histomatic::doLockPads(TPad *pad) {
+  if(!gPad)
+    return;
+  if(!gPad->GetCanvas()->InheritsFrom(GCanvas::Class())) 
+    return;
+
+  //printf("pad = 0x%p\n",pad);
+  //printf("gPad = 0x%p\n",gPad);
+
+
+  if(pad!=gPad) { // in a new pad - set the button
+    if(pad && pad->GetCanvas()->InheritsFrom(GCanvas::Class())) {
+      fLockPads->SetState(((GCanvas*)pad->GetCanvas())->GetLockPads() ? kButtonDown : kButtonUp);
+    }
+  }
+
+  //TODO -the feedback below is just broken.  need to fix
+  return;
+
+
+  //the pad and the gPad are always the same...(?) 
+  if(((GCanvas*)gPad->GetCanvas())->GetLockPads()) {
+    fLockPads->SetState(kButtonDown);
+  } else {
+    fLockPads->SetState(kButtonUp);
+  }
+
+  //if(fLockPads->GetState() == kButtonDown) {
+  //  ((GCanvas*)gPad->GetCanvas())->SetLockPads(true);
+  //} else {
+  //  ((GCanvas*)gPad->GetCanvas())->SetLockPads(false);
+  //}
 }
 
 
@@ -676,6 +744,7 @@ void Histomatic::drawHists(std::vector<TH1*> hists, TCanvas *g) {
     return;
   } 
 
+  int ic;
   switch(fDrawComboBox->GetSelected()) {
     case EDrawOption::eDrawNew:
       for (auto it=hists.begin();it!=hists.end();it++) {
@@ -683,14 +752,17 @@ void Histomatic::drawHists(std::vector<TH1*> hists, TCanvas *g) {
       } 
       break;
     case EDrawOption::eDrawSame:
-      {
-      THStack *hs = new THStack("hs","");
-      for(auto it=hists.begin();it!=hists.end();it++) 
-        hs->Add(*it);
-      //hs->Draw("pfc nostack");
-      hs->Draw("pfc nostack");
-      gPad->BuildLegend(0.75,0.75,0.95,0.95,"");
+      //THStack *hs = new THStack("hs","");
+      ic = gStyle->GetColorPalette(0); 
+      for(auto it=hists.begin();it!=hists.end();it++) {
+        //gPad->IncrementPaletteColor(ic,"plc");
+        (*it)->SetLineColor(ic++);
+        if(GrabHist()) 
+          (*it)->Draw("plc same");
+        else 
+          (*it)->Draw("plc");
       }
+      gPad->BuildLegend(0.75,0.75,0.95,0.95,"");
       break;  
     case EDrawOption::eDrawStacked:
       if(hists.size()<=5) {
@@ -701,20 +773,27 @@ void Histomatic::drawHists(std::vector<TH1*> hists, TCanvas *g) {
           (*it)->Draw();
         }
       } else {
-        THStack hs;
+        THStack *hs = new THStack(Form("hs_%s",gPad->GetTitle()),"");
         for(auto it=hists.begin();it!=hists.end();it++) 
-          hs.Add(*it);
-
-        hs.Draw("pads");
-
+          hs->Add(*it);
+        //printf("hs.GetNhists() = %i\n",hs.GetNhists());
+        hs->Draw("pads");
       }
       break;
     default:
       break;
   };
+}
 
 
-
+void Histomatic::closeAllCanvases() {
+  TSeqCollection *l = gROOT->GetListOfCanvases();
+  TIter iter(l);
+  while(TObject *obj = iter.Next()) {
+    TCanvas *c = (TCanvas*)obj;
+    c->Close();
+  }
+  return;
 }
 
 

@@ -13,8 +13,12 @@
 #pragma link C++ function PhotoPeakFit;
 #pragma link C++ function GrabHist;
 #pragma link C++ function GrabFit;
+#pragma link C++ function LabelPeaks;
+#pragma link C++ function RemovePeaks;
 
 #pragma link C++ function GetSignals;
+
+#pragma link C++ function CloseAllCanvases;
 
 #pragma link C++ class GCanvas+;
 #pragma link C++ class GMarker+;
