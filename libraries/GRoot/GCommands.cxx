@@ -8,6 +8,9 @@
 #include<TF1.h>
 #include<THStack.h>
 #include<TCanvas.h>
+#include<TSpectrum.h>
+#include<TPolyMarker.h>
+#include<TText.h>
 
 #include<GGaus.h>
 #include<GPeak.h>
@@ -192,6 +195,64 @@ double GetChi2(TObject *obj,TF1 *f=0) {
   }
   return sqrt(-1);
 }
+
+int LabelPeaks(TH1 *hist,double sigma,double thresh,Option_t *opt) {
+  TSpectrum::StaticSearch(hist,sigma,"Qnodraw",thresh);
+  TPolyMarker *pm = (TPolyMarker*)hist->GetListOfFunctions()->FindObject("TPolyMarker");
+  if(!pm) {
+    //something has gone wrong....
+    return 0;
+  }
+  TObjArray *array = (TObjArray*)hist->GetListOfFunctions()->FindObject("PeakLabels");
+  if(array) {
+    hist->GetListOfFunctions()->Remove((TObject*)array);
+    array->Delete();
+  }
+  array = new TObjArray();
+  array->SetName("PeakLabels");
+  int n = pm->GetN();
+  if(n==0)
+    return n;
+  TText *text;
+  double *x = pm->GetX();
+  //  double *y = pm->GetY();
+  for(int i=0;i<n;i++) {
+    //y[i] += y[i]*0.15;
+    double y = 0;
+    for(int i_x = x[i]-3;i_x<x[i]+3;i_x++){
+      if((hist->GetBinContent(hist->GetXaxis()->FindBin(i_x)))>y){
+        y = hist->GetBinContent(hist->GetXaxis()->FindBin(i_x));
+      }
+    }
+    y+=y*0.1;
+    text = new TText(x[i],y,Form("%.1f",x[i]));
+    text->SetTextSize(0.025);
+    text->SetTextAngle(90);
+    text->SetTextAlign(12);
+    text->SetTextFont(42);
+    text->SetTextColor(hist->GetLineColor());
+    array->Add(text);
+  }
+  hist->GetListOfFunctions()->Remove(pm);
+  pm->Delete();
+  hist->GetListOfFunctions()->Add(array);
+  return n;
+}
+
+
+
+bool RemovePeaks(TH1 *hists) {
+  bool flag = false;
+  //for(unsigned int i=0;i<nhists;i++) {
+    if(TObject *obj=hists->GetListOfFunctions()->FindObject("PeakLabels")) {
+      hists->GetListOfFunctions()->Remove(obj);
+      ((TObjArray*)obj)->Delete();
+      flag = true;
+    }
+  //}
+  return flag;
+}
+
 
 
 

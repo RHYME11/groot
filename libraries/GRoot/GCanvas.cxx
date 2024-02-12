@@ -404,7 +404,7 @@ bool GCanvas::HandleKeyPress(EEventType event, int px, int py) {
           currentHist->GetListOfFunctions()->Remove(*i);
         GMarker::RemoveAll(currentHist);
         currentHist->Sumw2(false);
-
+        RemovePeaks(currentHist);
       }
       doUpdate = true;
       handled  = true;
@@ -529,6 +529,16 @@ bool GCanvas::HandleKeyPress(EEventType event, int px, int py) {
         doUpdate = true;
         handled = true;
       }  
+      break;
+    case kKey_s:
+      currentHist=GrabHist();
+      if((TObjArray*)currentHist->GetListOfFunctions()->FindObject("PeakLabels")) {
+        RemovePeaks(currentHist);
+      } else{
+        LabelPeaks(currentHist);
+      }
+      doUpdate = true;
+      handled = true;
       break;
     case kKey_l:
     case kKey_z:

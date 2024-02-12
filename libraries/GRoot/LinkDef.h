@@ -13,6 +13,8 @@
 #pragma link C++ function PhotoPeakFit;
 #pragma link C++ function GrabHist;
 #pragma link C++ function GrabFit;
+#pragma link C++ function LabelPeaks;
+#pragma link C++ function RemovePeaks;
 
 #pragma link C++ function GetSignals;
 
