@@ -430,7 +430,7 @@ bool GCanvas::HandleKeyPress(EEventType event, int px, int py) {
           currentHist->GetListOfFunctions()->Remove(*i);
         GMarker::RemoveAll(currentHist);
         currentHist->Sumw2(false);
-        RemovePeaks(currentHist);
+        //RemovePeaks(currentHist);
       }
       doUpdate = true;
       handled  = true;
