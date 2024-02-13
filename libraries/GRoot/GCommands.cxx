@@ -182,12 +182,12 @@ double GetChi2(TObject *obj,TF1 *f=0) {
     int pzero = 0;
     for(int i=binLow;i<=binHigh;i++){            //help 
       double obs = hist->GetBinContent(i);
-      if(obs==0){
+      double cal = f->Eval(hist->GetBinCenter(i));
+      if(cal==0){
         pzero++;
         continue;
       }
-      double cal = f->Eval(hist->GetBinCenter(i));
-      chi2 += pow((obs-cal),2)/obs;
+      chi2 += pow((obs-cal),2)/cal;
     }
     int NDF = binHigh-binLow+1-pzero;
     //printf("chi2 = %f\n",chi2/(NDF-1)); // 10 is number of dat
