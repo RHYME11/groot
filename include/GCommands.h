@@ -13,6 +13,21 @@ class GPeak;
 
 typedef const char Option_t;
 
+struct GFitResult {
+  const char* histName = "";
+  const char* fitName = "";
+  double centroid = 0;
+  double fwhm = 0;
+  double area = 0;
+  double areaErr = 0;
+  double chi2 = 0;
+  double ndf = 0;
+  double xlow = 0;
+  double xhigh = 0;
+};
+
+typedef void (*GFitResultCallback)(const GFitResult&);
+
 struct GInteractionInfo {
   TVirtualPad* pad = nullptr;
   TObject* selected = nullptr;
@@ -46,7 +61,8 @@ TObject *GrabPlottable(int i=0);    //return the ith plottable (th1 or tgraph) t
 
 void ls(int n=0); 
 
-void ShowKeyboardShortcutHelp(); ///help box 
+void ShowKeyboardShortcutHelp(); ///help box
+void SetFitResultCallback(GFitResultCallback callback); 
 
 void SaveAllCuts(TH1*,const char* fname="output.cuts",Option_t *opt="recreate");
 

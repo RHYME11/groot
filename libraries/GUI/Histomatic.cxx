@@ -38,6 +38,13 @@ extern Histomatic *gHistomatic;
 
 Histomatic *Histomatic::fInstance = 0;
 
+namespace {
+  void UpdateHistomaticFitResults(const GFitResult& result) {
+    if(gHistomatic)
+      gHistomatic->UpdateFitResults(result);
+  }
+}
+
 ////////////////////
 ////////////////////
 
@@ -120,7 +127,60 @@ void GInfoPanel::Update(const GInteractionInfo &info) {
 
 }
 
+GFitResultsPanel::GFitResultsPanel(const TGWindow* parent)
+  : TGGroupFrame(parent, "Fit Results") {
+  AddRow("Hist", "");
+  AddRow("Fit", "");
+  AddRow("Centroid", "");
+  AddRow("FWHM", "");
+  AddRow("Area", "");
+  AddRow("Area Err", "");
+  AddRow("Chi2/NDF", "");
+  AddRow("Range", "");
+}
 
+GFitResultsPanel::~GFitResultsPanel() { }
+
+void GFitResultsPanel::AddRow(const std::string& key, const std::string& value) {
+  auto* row = new TGHorizontalFrame(this);
+  auto* keyLabel = new TGLabel(row, Form("%s:", key.c_str()));
+  auto* valLabel = new TGLabel(row, value.c_str());
+
+  keyLabel->SetTextJustify(kTextLeft);
+  valLabel->SetTextJustify(kTextRight);
+
+  row->AddFrame(keyLabel, new TGLayoutHints(kLHintsLeft, 4, 10, 2, 2));
+  row->AddFrame(valLabel, new TGLayoutHints(kLHintsExpandX, 4, 4, 2, 2));
+
+  AddFrame(row, new TGLayoutHints(kLHintsExpandX));
+  fRows[key] = valLabel;
+}
+
+void GFitResultsPanel::SetRow(const std::string& key, const std::string& value) {
+  auto it = fRows.find(key);
+  if(it == fRows.end())
+    AddRow(key, value);
+  else
+    it->second->SetText(value.c_str());
+
+  Layout();
+}
+
+void GFitResultsPanel::Update(const GFitResult& result) {
+  SetRow("Hist", result.histName);
+  SetRow("Fit", result.fitName);
+  SetRow("Centroid", Form("%.4f", result.centroid));
+  SetRow("FWHM", Form("%.4f", result.fwhm));
+  SetRow("Area", Form("%.4f", result.area));
+  SetRow("Area Err", Form("%.4f", result.areaErr));
+
+  if(result.ndf != 0)
+    SetRow("Chi2/NDF", Form("%.4f", result.chi2 / result.ndf));
+  else
+    SetRow("Chi2/NDF", "");
+
+  SetRow("Range", Form("%.4f to %.4f", result.xlow, result.xhigh));
+}
 
 
 ////////////////////
@@ -133,6 +193,7 @@ Histomatic::Histomatic() : TGMainFrame(gClient->GetRoot(),350,780), fVf(0) {
   int height = 780;
 
   CreateWindow();
+  SetFitResultCallback(UpdateHistomaticFitResults);
   this->SetWindowName("hist-o-matic");
 
   int dh = gClient->GetDisplayHeight();
@@ -199,6 +260,7 @@ Histomatic::~Histomatic() {
 
   delete fInfoPanel;
   //delete fStatusBar;
+  delete fFitResultsPanel;
 
   delete fButtonRow1;
   delete fButtonRow2;
@@ -309,6 +371,7 @@ void Histomatic::CreateWindow() {
   fGListTree = new GListTree(fGListTreeCanvas); 
 
   fInfoPanel = new GInfoPanel(fVf);
+  fFitResultsPanel = new GFitResultsPanel(fVf);
 
   fStatusBar = new TGStatusBar(fVf,100,50);
   fStatusBar->SetParts(4);
@@ -323,6 +386,7 @@ void Histomatic::CreateWindow() {
   fVf->AddFrame(fDrawOptionContainer,fLH0);
   fVf->AddFrame(fGListTreeCanvas,fLH1);
   fVf->AddFrame(fInfoPanel,new TGLayoutHints(kLHintsExpandX,2,2,4,4));
+  fVf->AddFrame(fFitResultsPanel, new TGLayoutHints(kLHintsExpandX,2,2,4,4));
   fVf->AddFrame(fStatusBar,fLH0);
 
 

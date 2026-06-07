@@ -28,6 +28,36 @@
 #include<GH2D.h>
 
 
+namespace {
+  GFitResultCallback gFitResultCallback = nullptr;
+
+  void NotifyFitResult(TH1* hist, GGaus* fit) {
+    if(!gFitResultCallback || !hist || !fit) return;
+
+    double xlow = 0;
+    double xhigh = 0;
+    fit->GetRange(xlow, xhigh);
+
+    GFitResult result;
+    result.histName = hist->GetName();
+    result.fitName = fit->GetName();
+    result.centroid = fit->GetCentroid();
+    result.fwhm = fit->GetFWHM();
+    result.area = fit->GetArea();
+    result.areaErr = fit->GetAreaErr();
+    result.chi2 = fit->GetChi2();
+    result.ndf = fit->GetNdf();
+    result.xlow = xlow;
+    result.xhigh = xhigh;
+
+    gFitResultCallback(result);
+  }
+}
+
+void SetFitResultCallback(GFitResultCallback callback) {
+  gFitResultCallback = callback;
+}
+
 GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(!hist)
     return 0;
@@ -44,6 +74,7 @@ GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
 
   double chi2 = GetChi2(hist,mypeak);
   printf("Cal chi2 = %.03f\n",chi2);
+  NotifyFitResult(hist, mypeak);
 
   return mypeak;
 }
