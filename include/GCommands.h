@@ -48,6 +48,11 @@ void ls(int n=0);
 
 void SaveAllCuts(TH1*,const char* fname="output.cuts",Option_t *opt="recreate");
 
+bool MakeCalibration(const char* pointsFile,
+		     const char* calFile="calibration.cal",
+		     int order=1,
+		     const char* unit="keV");
+
 double GetChi2(TObject*,TF1*);
 
 void GRootInteract();  //void so it doesn't repeatedly print the return to the terminal.

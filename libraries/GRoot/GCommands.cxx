@@ -11,6 +11,9 @@
 #include<KeySymbols.h>
 #include<TFile.h>
 #include <TCutG.h>
+#include <TGraphErrors.h>
+#include <fstream>
+#include <vector>
 
 #include<GCanvas.h>
 #include<GGaus.h>
@@ -60,6 +63,78 @@ GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
 
   return mypeak;
 }
+
+// making calibration files
+
+bool MakeCalibration(const char* pointsFile,
+                     const char* calFile,
+                     int order,
+                     const char* unit) {
+  std::ifstream input(pointsFile);
+  if(!input.is_open()) {
+    std::cout << "Could not open calibration points file: "
+              << pointsFile << std::endl;
+    return false;
+  }
+
+  std::vector<double> channels;
+  std::vector<double> energies;
+
+  double channel = 0;
+  double energy = 0;
+
+  while(input >> channel >> energy) {
+    channels.push_back(channel);
+    energies.push_back(energy);
+  }
+
+  if(channels.size() < 2) {
+    std::cout << "Need at least two calibration points." << std::endl;
+    return false;
+  }
+
+  if(order < 1) order = 1;
+  if(order > 2) order = 2;
+
+  TGraphErrors* graph = new TGraphErrors(channels.size());
+  graph->SetName("calibration_graph");
+  graph->SetTitle("Calibration;Channel;Energy");
+
+  for(size_t i = 0; i < channels.size(); ++i) {
+    graph->SetPoint(i, channels[i], energies[i]);
+  }
+
+  TF1* fit = new TF1("calibration_fit", order == 1 ? "pol1" : "pol2");
+  graph->Fit(fit, "Q");
+
+  double c0 = fit->GetParameter(0);
+  double c1 = fit->GetParameter(1);
+  double c2 = order == 2 ? fit->GetParameter(2) : 0;
+
+  std::ofstream output(calFile);
+  if(!output.is_open()) {
+    std::cout << "Could not write calibration file: "
+              << calFile << std::endl;
+    return false;
+  }
+
+  output << "C0 = " << c0 << "\n";
+  output << "C1 = " << c1 << "\n";
+  output << "C2 = " << c2 << "\n";
+  output << "unit = " << unit << "\n";
+
+  std::cout << "Wrote calibration file: " << calFile << std::endl;
+  std::cout << "C0=" << c0
+            << ", C1=" << c1
+            << ", C2=" << c2
+            << ", unit=" << unit
+            << std::endl;
+
+  return true;
+}
+
+
+
 
 
 TH1 *GrabHist(int i)  {

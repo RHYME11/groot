@@ -23,6 +23,8 @@
 
 #pragma link C++ function SaveAllCuts;
 
+#pragma link C++ function MakeCalibration;
+
 #pragma link C++ function GetSignals;
 
 #pragma link C++ function CloseAllCanvases;
