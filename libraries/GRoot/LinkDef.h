@@ -10,7 +10,7 @@
 #pragma link C++ global gHist;
 #pragma link C++ global gHistomatic;
 
-#pragma link C++ function GausFit;
+#pragma link C++ function AutoFitPeaks;
 #pragma link C++ function PhotoPeakFit;
 #pragma link C++ function GrabHist;
 #pragma link C++ function GrabFit;

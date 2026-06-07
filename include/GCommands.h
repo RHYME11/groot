@@ -50,6 +50,11 @@ struct GInteractionInfo {
 GPeak *PhotoPeakFit(TH1*,double,double,Option_t *opt="");
 GGaus *GausFit(TH1*,double,double,Option_t *opt="");
 
+int AutoFitPeaks(TH1* hist=nullptr,
+		double threshold = .10,
+		double sigma = 1.0,
+		int maxPeaks = 50);
+
 TH1D  *ResidualHist(TH1* hist, TF1* fit=nullptr);
 void   DrawResiduals(TH1* hist, TF1* fit=nullptr,bool normalized=true);
 

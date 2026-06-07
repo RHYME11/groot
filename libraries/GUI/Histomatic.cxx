@@ -49,7 +49,7 @@ namespace {
 ////////////////////
 
 GInfoPanel::GInfoPanel(const TGWindow* parent) 
-  : TGGroupFrame(parent,"i am a title!") { //,
+  : TGGroupFrame(parent,"i need to be useful") { //,
   //fObject(0),fPosition(0),fBin(0),fCounts(0),fMarker(0),fMode(0) {
 
     //fObject   = new TGLabel(this, "Object:");
@@ -395,38 +395,52 @@ void Histomatic::CreateWindow() {
   this->Resize(this->GetDefaultSize());
 }
 
-void Histomatic::doLockPads(TPad *pad) {
-  if(!gPad)
-    return;
-  if(!gPad->GetCanvas()->InheritsFrom(GCanvas::Class())) 
-    return;
+//void Histomatic::doLockPads(TPad *pad) {
+  //if(!gPad)
+   // return;
+ // if(!gPad->GetCanvas()->InheritsFrom(GCanvas::Class())) 
+   // return;
 
   //printf("pad = 0x%p\n",pad);
   //printf("gPad = 0x%p\n",gPad);
 
 
-  if(pad!=gPad) { // in a new pad - set the button
-    if(pad && pad->GetCanvas()->InheritsFrom(GCanvas::Class())) {
-      fLockPads->SetState(((GCanvas*)pad->GetCanvas())->GetLockPads() ? kButtonDown : kButtonUp);
-    }
-  }
+ // if(pad!=gPad) { // in a new pad - set the button
+   // if(pad && pad->GetCanvas()->InheritsFrom(GCanvas::Class())) {
+      //fLockPads->SetState(((GCanvas*)pad->GetCanvas())->GetLockPads() ? kButtonDown : kButtonUp);
+    //}
+  //}
 
   //TODO -the feedback below is just broken.  need to fix
-  return;
-
-
+  //return;
+				// The old lock-pad feedback path mixed canvas-selection updates with
+				// checkbox-click handling. Returns early before updating.
   //the pad and the gPad are always the same...(?) 
-  if(((GCanvas*)gPad->GetCanvas())->GetLockPads()) {
-    fLockPads->SetState(kButtonDown);
-  } else {
-    fLockPads->SetState(kButtonUp);
-  }
+  //if(((GCanvas*)gPad->GetCanvas())->GetLockPads()) {
+    //fLockPads->SetState(kButtonDown);
+  //} else {
+    //fLockPads->SetState(kButtonUp);
+ // }
 
   //if(fLockPads->GetState() == kButtonDown) {
   //  ((GCanvas*)gPad->GetCanvas())->SetLockPads(true);
   //} else {
   //  ((GCanvas*)gPad->GetCanvas())->SetLockPads(false);
   //}
+//}
+
+void Histomatic::doLockPads(TPad *pad) {
+  TVirtualPad *targetPad = pad ? static_cast<TVirtualPad*>(pad) : gPad;
+  if(!targetPad || !targetPad->GetCanvas()) return;
+  if(!targetPad->GetCanvas()->InheritsFrom(GCanvas::Class())) return;
+
+  GCanvas *canvas = static_cast<GCanvas*>(targetPad->GetCanvas());
+
+  if(pad) {
+    fLockPads->SetState(canvas->GetLockPads() ? kButtonDown : kButtonUp);
+  } else {
+    canvas->SetLockPads(fLockPads->GetState() == kButtonDown);
+  }
 }
 
 

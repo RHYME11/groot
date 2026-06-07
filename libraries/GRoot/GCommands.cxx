@@ -15,6 +15,10 @@
 #include<TFile.h>
 #include <TCutG.h>
 #include <TGraphErrors.h>
+#include <TSpectrum.h>
+#include <algorithm>
+#include <cmath>
+#include <utility>
 #include <fstream>
 #include <vector>
 
@@ -78,6 +82,116 @@ GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
 
   return mypeak;
 }
+
+///////
+
+int AutoFitPeaks(TH1* hist, double threshold, double sigma, int maxPeaks) {
+  if(!hist)
+    hist = GrabHist();
+
+  if(!hist || hist->GetDimension() != 1) {
+    std::cout << "AutoFitPeaks needs a 1D histogram." << std::endl;
+    return 0;
+  }
+
+  TSpectrum spectrum(maxPeaks * 4);
+  int found = spectrum.Search(hist, sigma, "goff nodraw", threshold);
+  if(found <= 0) {
+    std::cout << "AutoFitPeaks found no peaks." << std::endl;
+    return 0;
+  }
+
+  struct PeakCandidate {
+    double x;
+    double y;
+  };
+
+  std::vector<PeakCandidate> candidates;
+  double* positions = spectrum.GetPositionX();
+
+  for(int i = 0; i < found; ++i) {
+    int bin = hist->GetXaxis()->FindBin(positions[i]);
+    candidates.push_back({positions[i], hist->GetBinContent(bin)});
+  }
+
+  std::sort(candidates.begin(), candidates.end(),
+            [](const PeakCandidate& a, const PeakCandidate& b) {
+              return a.y > b.y;
+            });
+
+  std::vector<std::pair<double,double>> acceptedRanges;
+  int fitted = 0;
+
+  double axisLow = hist->GetXaxis()->GetXmin();
+  double axisHigh = hist->GetXaxis()->GetXmax();
+  double axisWidth = axisHigh - axisLow;
+
+  for(const auto& candidate : candidates) {
+    if(fitted >= maxPeaks)
+      break;
+
+    int bin = hist->GetXaxis()->FindBin(candidate.x);
+    double binWidth = hist->GetXaxis()->GetBinWidth(bin);
+    double halfWidth = std::max(3.0 * sigma * binWidth, 0.01 * axisWidth);
+
+    double xlow = std::max(axisLow, candidate.x - halfWidth);
+    double xhigh = std::min(axisHigh, candidate.x + halfWidth);
+
+    bool overlaps = false;
+    for(const auto& range : acceptedRanges) {
+      if(xlow < range.second && xhigh > range.first) {
+        overlaps = true;
+        break;
+      }
+    }
+
+    if(overlaps) {
+      std::cout << "\tskipped overlapping peak near " << candidate.x << std::endl;
+      continue;
+    }
+
+    GGaus* fit = new GGaus(xlow, xhigh);
+    fit->SetName(Form("auto_gaus_%d", fitted));
+    fit->Fit(hist, "Q+no-print");
+
+    double reducedChi2 = fit->GetNdf() != 0 ? fit->GetChi2() / fit->GetNdf() : 0;
+    bool goodFit = fit->GetCentroid() >= xlow &&
+                   fit->GetCentroid() <= xhigh &&
+                   fit->GetArea() > 0 &&
+                   fit->GetFWHM() > 0 &&
+                   fit->GetNdf() > 0 &&
+                   reducedChi2 < 25.0;
+
+    if(!goodFit) {
+      std::cout << "\trejected peak near " << candidate.x
+                << " chi2/NDF=" << reducedChi2 << std::endl;
+      delete fit;
+      continue;
+    }
+
+    acceptedRanges.push_back({xlow, xhigh});
+    NotifyFitResult(hist, fit);
+
+    std::cout << "\tauto fit " << fit->GetName()
+              << " centroid=" << fit->GetCentroid()
+              << " area=" << fit->GetArea()
+              << " FWHM=" << fit->GetFWHM()
+              << " chi2/NDF=" << reducedChi2
+              << std::endl;
+
+    ++fitted;
+  }
+
+  if(gPad) {
+    gPad->Modified();
+    gPad->Update();
+  }
+
+  std::cout << "AutoFitPeaks fit " << fitted << " of " << found << " found peaks." << std::endl;
+  return fitted;
+}
+
+///////
 
 GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(!hist)
@@ -570,7 +684,8 @@ void ShowKeyboardShortcutHelp() {
     "z/l    Toggle log scale\n"
     "?      Show this help\n"
     "r      Create ROI from two markers\n"
-    "R      Delete all ROIs on current histogram\n";
+    "R      Delete all ROIs on current histogram\n"
+    "a      Auto-fit peaks\n";
 
   new TGMsgBox(gClient->GetRoot(), gClient->GetRoot(),
                "Keyboard Shortcuts", help, kMBIconAsterisk, kMBOk);
@@ -610,6 +725,12 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
       }
       break;
 
+    case kKey_a:
+      if(currentHist && currentHist->GetDimension() == 1) {
+	AutoFitPeaks(currentHist);
+	info.modified = true;
+      }
+      break;
     case kKey_B:
       if(currentHist && currentHist->InheritsFrom(GH1D::Class())) {
         dynamic_cast<GH1D*>(currentHist)->ToggleBackground();
