@@ -75,6 +75,7 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
 
     void buttonAction();
     void SetStatusText(std::string text, int col) { fStatusBar->SetText(text.c_str(),col); }
+    void showKeyboardShortcutHelp();
 
   //private:
     void doUpdate() const;

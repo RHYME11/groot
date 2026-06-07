@@ -15,3 +15,42 @@ TH1:
           Select a pad;
           If the pad was selected already and a TH1 exsits, copy the selected histogram and draw in a new canvas;
           
+
+
+
+
+
+
+Keyboard shortcuts:
+
+  ?      Open shortcut help
+  g      Gaussian fit / 2D gate from markers
+  b      Show background
+  B      Toggle background
+  s      Show peaks
+  x/y    Project 2D histogram onto X/Y
+  p      Project selected marked range
+  w/q    Rebin / unbin by 2
+  m      Remove markers
+  o      Unzoom axes
+  z/l    Toggle log scale
+
+
+
+
+Interactive ROI Tool
+
+The ROI tool lets users define a region of interest on a 1D histogram. Place two markers on the histogram, then press `r` to create an ROI between those marker positions.
+
+When an ROI is created, the selected x-range is shaded on the histogram and a short summary is printed:
+
+  created ROI_0 [xlow, xhigh] counts=...
+
+The `counts` value is the sum of all bin contents inside the ROI. In physics terms, this is the total number of detected events in that selected region. If the ROI surrounds a peak, this is the gross peak area, including both signal and background.
+
+Press `R` to remove all ROIs from the current histogram.
+
+ROIs automatically update their shaded range when the histogram is rebinned or unbinned.
+
+
+

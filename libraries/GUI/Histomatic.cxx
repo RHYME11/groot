@@ -257,8 +257,8 @@ void Histomatic::CreateWindow() {
   fButton5->Connect("Clicked()","Histomatic",this,"buttonAction()");
   fButton6 = new TGTextButton(fButtonRow2,"button6");
   fButton6->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton7 = new TGTextButton(fButtonRow2,"button7");
-  fButton7->Connect("Clicked()","Histomatic",this,"buttonAction()");
+  fButton7 = new TGTextButton(fButtonRow2,"Help");
+  fButton7->Connect("Clicked()","Histomatic",this,"showKeyboardShortcutHelp()");
   fButton8 = new TGTextButton(fButtonRow2,"do Draw");
   fButton8->Connect("Clicked()","Histomatic",this,"doDraw()");
 
@@ -378,6 +378,11 @@ void Histomatic::buttonAction() {
   printf("button ACTION!!! \n");
 
 }
+
+void Histomatic::showKeyboardShortcutHelp() {
+  ShowKeyboardShortcutHelp();
+}
+
 
 void Histomatic::doDraw() {
   doDraw(fGListTree->GetSelected(),"");

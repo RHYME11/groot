@@ -46,6 +46,8 @@ TObject *GrabPlottable(int i=0);    //return the ith plottable (th1 or tgraph) t
 
 void ls(int n=0); 
 
+void ShowKeyboardShortcutHelp(); ///help box 
+
 void SaveAllCuts(TH1*,const char* fname="output.cuts",Option_t *opt="recreate");
 
 bool MakeCalibration(const char* pointsFile,

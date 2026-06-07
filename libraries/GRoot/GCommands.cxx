@@ -1,6 +1,9 @@
 
 #include <GCommands.h>
 
+#include <TGClient.h>
+#include <TGMsgBox.h>
+
 #include<TROOT.h>
 #include<TVirtualPad.h>
 #include<TList.h>
@@ -19,6 +22,7 @@
 #include<GGaus.h>
 #include<GPeak.h>
 #include<GMarker.h>
+#include<GROI.h>
 
 #include<GH1D.h>
 #include<GH2D.h>
@@ -518,6 +522,31 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
   return true;
 }
 
+
+void ShowKeyboardShortcutHelp() {
+  const char* help =
+    "g      Gaussian fit / 2D gate from markers\n"
+    "b      Show background\n"
+    "B      Toggle background\n"
+    "s      Show peaks\n"
+    "x      Project 2D histogram onto X\n"
+    "y      Project 2D histogram onto Y\n"
+    "p      Project selected marked range\n"
+    "w      Rebin by 2\n"
+    "q      Unbin by 2\n"
+    "m      Remove markers\n"
+    "o      Unzoom axes\n"
+    "z/l    Toggle log scale\n"
+    "?      Show this help\n"
+    "r      Create ROI from two markers\n"
+    "R      Delete all ROIs on current histogram\n";
+
+  new TGMsgBox(gClient->GetRoot(), gClient->GetRoot(),
+               "Keyboard Shortcuts", help, kMBIconAsterisk, kMBOk);
+}
+
+
+
 bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
   //printf("key:  %i\t%i\t%i\n",event,px,py);
   std::vector<GMarker*> markers = GMarker::Get(currentHist,GMarkerType::kPrimary);
@@ -529,6 +558,27 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
         info.modified = true;
       }
       break;
+
+    case kKey_Question:
+	ShowKeyboardShortcutHelp();
+      break;
+
+    case kKey_r:
+      if(currentHist && currentHist->GetDimension() == 1 && markers.size() > 1) {
+        if(GROI::CreateFromMarkers(currentHist)) {
+          GMarker::RemoveAll(currentHist);
+          info.modified = true;
+        }
+      }
+      break;
+
+    case kKey_R:
+      if(currentHist) {
+        GROI::RemoveAll(currentHist);
+        info.modified = true;
+      }
+      break;
+
     case kKey_B:
       if(currentHist && currentHist->InheritsFrom(GH1D::Class())) {
         dynamic_cast<GH1D*>(currentHist)->ToggleBackground();
