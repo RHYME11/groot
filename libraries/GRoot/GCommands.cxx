@@ -15,6 +15,11 @@
 #include<TFile.h>
 #include <TCutG.h>
 #include <TGraphErrors.h>
+
+#include <TObjString.h>
+#include <TParameter.h>
+#include <TAxis.h>
+
 #include <TSpectrum.h>
 #include <algorithm>
 #include <cmath>
@@ -27,6 +32,7 @@
 #include<GPeak.h>
 #include<GMarker.h>
 #include<GROI.h>
+#include<GCalibration.h>
 
 #include<GH1D.h>
 #include<GH2D.h>
@@ -219,71 +225,135 @@ bool MakeCalibration(const char* pointsFile,
                      const char* calFile,
                      int order,
                      const char* unit) {
-  std::ifstream input(pointsFile);
-  if(!input.is_open()) {
-    std::cout << "Could not open calibration points file: "
-              << pointsFile << std::endl;
+  GCalibration calibration;
+
+  if(!calibration.LoadPoints(pointsFile))
     return false;
-  }
 
-  std::vector<double> channels;
-  std::vector<double> energies;
-
-  double channel = 0;
-  double energy = 0;
-
-  while(input >> channel >> energy) {
-    channels.push_back(channel);
-    energies.push_back(energy);
-  }
-
-  if(channels.size() < 2) {
-    std::cout << "Need at least two calibration points." << std::endl;
+  if(!calibration.Fit(order, unit))
     return false;
-  }
 
-  if(order < 1) order = 1;
-  if(order > 2) order = 2;
-
-  TGraphErrors* graph = new TGraphErrors(channels.size());
-  graph->SetName("calibration_graph");
-  graph->SetTitle("Calibration;Channel;Energy");
-
-  for(size_t i = 0; i < channels.size(); ++i) {
-    graph->SetPoint(i, channels[i], energies[i]);
-  }
-
-  TF1* fit = new TF1("calibration_fit", order == 1 ? "pol1" : "pol2");
-  graph->Fit(fit, "Q");
-
-  double c0 = fit->GetParameter(0);
-  double c1 = fit->GetParameter(1);
-  double c2 = order == 2 ? fit->GetParameter(2) : 0;
-
-  std::ofstream output(calFile);
-  if(!output.is_open()) {
-    std::cout << "Could not write calibration file: "
-              << calFile << std::endl;
+  if(!calibration.Save(calFile))
     return false;
-  }
-
-  output << "C0 = " << c0 << "\n";
-  output << "C1 = " << c1 << "\n";
-  output << "C2 = " << c2 << "\n";
-  output << "unit = " << unit << "\n";
 
   std::cout << "Wrote calibration file: " << calFile << std::endl;
-  std::cout << "C0=" << c0
-            << ", C1=" << c1
-            << ", C2=" << c2
-            << ", unit=" << unit
+  std::cout << "C0=" << calibration.GetC0()
+            << ", C1=" << calibration.GetC1()
+            << ", C2=" << calibration.GetC2()
+            << ", unit=" << calibration.GetUnit()
             << std::endl;
+
+  const auto& residuals = calibration.GetResiduals();
+  const auto& points = calibration.GetPoints();
+
+  std::cout << "Calibration residuals:" << std::endl;
+  for(size_t i = 0; i < points.size(); ++i) {
+    std::cout << "\tchannel=" << points[i].channel
+              << ", energy=" << points[i].energy
+              << ", residual=" << residuals[i]
+              << std::endl;
+  }
 
   return true;
 }
 
+TGraphErrors* DrawCalibrationResiduals(const char* pointsFile,
+                                       int order,
+                                       const char* unit) {
+  GCalibration calibration;
+
+  if(!calibration.LoadPoints(pointsFile))
+    return nullptr;
+
+  if(!calibration.Fit(order, unit))
+    return nullptr;
+
+  const auto& points = calibration.GetPoints();
+  const auto& residuals = calibration.GetResiduals();
+
+  TGraphErrors* graph = new TGraphErrors(points.size());
+  graph->SetName("calibration_residuals");
+  graph->SetTitle(Form("Calibration Residuals;Channel;Residual (%s)",
+                       calibration.GetUnit()));
+
+  for(size_t i = 0; i < points.size(); ++i) {
+    graph->SetPoint(i, points[i].channel, residuals[i]);
+    graph->SetPointError(i, points[i].channelErr, points[i].energyErr);
+  }
+
+  graph->SetMarkerStyle(20);
+  graph->SetMarkerSize(1.1);
+  graph->Draw("AP");
+
+  std::cout << "Drew calibration residuals for "
+            << pointsFile << std::endl;
+
+  return graph;
+}
 
 
+TH1D* ApplyCalibration(TH1* hist, const char* calFile, const char* name) {
+  if(!hist)
+    hist = GrabHist();
+
+  if(!hist || hist->GetDimension() != 1) {
+    std::cout << "ApplyCalibration needs a 1D histogram." << std::endl;
+    return nullptr;
+  }
+
+  if(hist->GetListOfFunctions() &&
+   (hist->GetListOfFunctions()->FindObject("C0") ||
+    hist->GetListOfFunctions()->FindObject("C1") ||
+    hist->GetListOfFunctions()->FindObject("C2"))) {
+  std::cout << "Histogram " << hist->GetName()
+            << " already appears to have calibration metadata. "
+            << "Skipping to avoid applying calibration twice."
+            << std::endl;
+  return nullptr;
+}
+
+  GCalibration calibration;
+  if(!calibration.Load(calFile))
+    return nullptr;
+
+  int nBins = hist->GetNbinsX();
+  std::vector<double> binEdges;
+  binEdges.reserve(nBins + 1);
+
+  for(int i = 1; i <= nBins + 1; ++i) {
+    double channelEdge = hist->GetXaxis()->GetBinLowEdge(i);
+    binEdges.push_back(calibration.Eval(channelEdge));
+  }
+
+  TString histName = name ? name : Form("%s_calibrated", hist->GetName());
+  TH1D* calibrated = new TH1D(histName.Data(),
+                              hist->GetTitle(),
+                              nBins,
+                              binEdges.data());
+
+  calibrated->SetDirectory(nullptr);
+  calibrated->GetXaxis()->SetTitle(calibration.GetUnit());
+  calibrated->GetYaxis()->SetTitle(hist->GetYaxis()->GetTitle());
+
+  for(int bin = 1; bin <= nBins; ++bin) {
+    calibrated->SetBinContent(bin, hist->GetBinContent(bin));
+    calibrated->SetBinError(bin, hist->GetBinError(bin));
+  }
+
+  calibrated->GetListOfFunctions()->Add(new TParameter<double>("C0", calibration.GetC0()));
+  calibrated->GetListOfFunctions()->Add(new TParameter<double>("C1", calibration.GetC1()));
+  calibrated->GetListOfFunctions()->Add(new TParameter<double>("C2", calibration.GetC2()));
+  calibrated->GetListOfFunctions()->Add(new TObjString(Form("unit=%s", calibration.GetUnit())));
+
+  calibrated->Draw();
+
+  std::cout << "Applied calibration from " << calFile
+            << " to " << hist->GetName()
+            << " -> " << calibrated->GetName()
+            << std::endl;
+
+  return calibrated;
+}
 
 
 TH1 *GrabHist(int i)  {

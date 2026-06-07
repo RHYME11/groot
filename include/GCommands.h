@@ -8,6 +8,7 @@ class TH1;
 class TH1D;
 class TF1;
 class TGraph;
+class TGraphErrors;
 class GGaus;
 class GPeak;
 
@@ -75,6 +76,14 @@ bool MakeCalibration(const char* pointsFile,
 		     const char* calFile="calibration.cal",
 		     int order=1,
 		     const char* unit="keV");
+
+TH1D* ApplyCalibration(TH1* hist=nullptr,
+		     const char* calFile="calibration.cal",
+		     const char* name=nullptr); 
+
+TGraphErrors* DrawCalibrationResiduals(const char* pointsFile,
+				       int order = 1,
+				       const char* unit="keV");
 
 double GetChi2(TObject*,TF1*);
 

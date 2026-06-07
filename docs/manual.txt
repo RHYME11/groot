@@ -54,3 +54,99 @@ ROIs automatically update their shaded range when the histogram is rebinned or u
 
 
 
+
+==Energy Calibration Protocol==
+
+1. Measure a known calibration source.
+
+   Use a source with well-known gamma-ray energies, such as Co-60,
+   Cs-137, Na-22, Ba-133, or Eu-152.
+
+2. Open the uncalibrated spectrum.
+
+   Start Groot and load the spectrum in channel space.
+
+3. Find the calibration peaks.
+
+   Use peak labels or manual fitting to identify the channel position
+   of each known gamma-ray peak.
+
+   Example Co-60 lines:
+     1173.2 keV
+     1332.5 keV
+
+4. Create a calibration points file.
+
+   Make a plain text file with one calibration point per line:
+
+     measured_channel known_energy
+
+   Example:
+
+     429.8  1173.2
+     488.6  1332.5
+
+   Optional uncertainties may be added as third and fourth columns:
+
+     measured_channel known_energy channel_uncertainty energy_uncertainty
+
+5. Generate a .cal file.
+
+   In Groot, run:
+
+     MakeCalibration("channelenergy.dat", "test.cal", 1)
+
+   Use order 1 for a linear calibration:
+
+     E = C0 + C1 * channel
+
+   Use order 2 for a quadratic calibration:
+
+     E = C0 + C1 * channel + C2 * channel^2
+
+   Example quadratic command:
+
+     MakeCalibration("channelenergy.dat", "test.cal", 2)
+
+6. Check calibration residuals.
+
+   Run:
+
+     DrawCalibrationResiduals("channelenergy.dat", 1)
+
+   The residual plot shows:
+
+     fitted_energy - known_energy
+
+   A good calibration should have residuals close to zero with no clear
+   curved trend. If the residuals are poor, check the peak assignments or
+   try a different calibration order.
+
+7. Apply the calibration.
+
+   To apply calibration while loading a .txt3 file:
+
+     ./bin/groot -g test.cal path/to/spectrum.txt3
+
+   To apply calibration to an already-open 1D histogram in Groot:
+
+     ApplyCalibration(GrabHist(), "test.cal")
+
+8. Verify the calibrated spectrum.
+
+   The new calibrated histogram should have its x-axis labeled in the
+   calibration unit, usually keV.
+
+   Known peaks should now appear near their expected energies.
+
+9. Save and reuse the .cal file.
+
+   The .cal file stores:
+
+     C0
+     C1
+     C2
+     unit
+
+   Reuse this file for spectra measured with the same detector setup and
+   acquisition conditions.

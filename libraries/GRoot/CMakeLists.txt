@@ -13,6 +13,7 @@ add_library(GROOTLIB SHARED
   GPeak2.cxx 
   GGlobals.cxx 
   GROI.cxx
+  GCalibration.cxx
 )
 
 target_include_directories(GROOTLIB PUBLIC
@@ -33,6 +34,7 @@ root_generate_dictionary(G__GROOTLIB
   GPeak2.h 
   GGlobals.h 
   GROI.h 
+  GCalibration.h
   MODULE GROOTLIB 
   LINKDEF LinkDef.h
 )
