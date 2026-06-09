@@ -25,6 +25,7 @@
 #pragma link C++ function SaveAllCuts;
 
 #pragma link C++ function MakeCalibration;
+#pragma link C++ function MakeSourceCalibration;
 #pragma link C++ function DrawCalibrationResiduals;
 #pragma link C++ function ApplyCalibration;
 
@@ -45,6 +46,7 @@
 #pragma link C++ class GPeak2+;
 #pragma link C++ class GROI+;
 #pragma link C++ class GCalibration+;
-
+#pragma link C++ class GTransition+;
+#pragma link C++ class GNucleus+;
 
 #endif

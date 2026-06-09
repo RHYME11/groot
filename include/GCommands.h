@@ -77,6 +77,15 @@ bool MakeCalibration(const char* pointsFile,
 		     int order=1,
 		     const char* unit="keV");
 
+bool MakeSourceCalibration(TH1* hist,
+		     const char* source,
+		     const char* calFile="calibration.cal",
+		     int order=1,
+			double sigma=2.0,
+			double threshold= 0.05,
+			const char* unit="keV");
+
+
 TH1D* ApplyCalibration(TH1* hist=nullptr,
 		     const char* calFile="calibration.cal",
 		     const char* name=nullptr); 

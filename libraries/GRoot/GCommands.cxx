@@ -26,6 +26,10 @@
 #include <utility>
 #include <fstream>
 #include <vector>
+#include <limits>
+#include <map>
+#include <numeric>
+#include <string>
 
 #include<GCanvas.h>
 #include<GGaus.h>
@@ -33,6 +37,8 @@
 #include<GMarker.h>
 #include<GROI.h>
 #include<GCalibration.h>
+#include<GNucleus.h>
+#include<GTransition.h>
 
 #include<GH1D.h>
 #include<GH2D.h>
@@ -62,6 +68,365 @@ namespace {
 
     gFitResultCallback(result);
   }
+
+///// something very stupid. if it doesn't work replace with MatchSourceLines(....)  
+
+  struct SourceLineCandidate {
+    double energy = 0;
+    double energyUncertainty = 0;
+    double intensity = 0;
+    double intensityUncertainty = 0;
+  };
+
+  struct PeakCandidate {
+    double centroid = 0;
+    double centroidErr = 0;
+    double area = 0;
+    double areaErr = 0;
+    double fwhm = 0;
+    double chi2Ndf = 0;
+    double height = 0;
+  };
+
+  struct CalibrationAssignment {
+    PeakCandidate peak;
+    SourceLineCandidate line;
+    double calibratedEnergy = 0;
+    double residual = 0;
+  };
+
+  struct CalibrationSolution {
+    bool valid = false;
+    bool ambiguous = false;
+    std::string rejectionReason;
+
+    double c0 = 0;
+    double c1 = 1;
+    double c2 = 0;
+
+    double rmsResidual = std::numeric_limits<double>::max();
+    double score = std::numeric_limits<double>::max();
+    double secondBestScore = std::numeric_limits<double>::max();
+
+    std::vector<CalibrationAssignment> assignments;
+  };
+
+  bool ComparePeakByCentroid(const PeakCandidate& lhs,
+                             const PeakCandidate& rhs) {
+    return lhs.centroid < rhs.centroid;
+  }
+
+  bool ComparePeakByArea(const PeakCandidate& lhs,
+                         const PeakCandidate& rhs) {
+    return lhs.area > rhs.area;
+  }
+
+  bool CompareSourceLineByEnergy(const SourceLineCandidate& lhs,
+                                 const SourceLineCandidate& rhs) {
+    return lhs.energy < rhs.energy;
+  }
+
+  bool CompareSourceLineByIntensity(const SourceLineCandidate& lhs,
+                                    const SourceLineCandidate& rhs) {
+    return lhs.intensity > rhs.intensity;
+  }
+
+  void BuildIndexCombinations(int n,
+                              int k,
+                              int start,
+                              std::vector<int>& current,
+                              std::vector<std::vector<int>>& output) {
+    if(static_cast<int>(current.size()) == k) {
+      output.push_back(current);
+      return;
+    }
+
+    for(int i = start; i < n; ++i) {
+      current.push_back(i);
+      BuildIndexCombinations(n, k, i + 1, current, output);
+      current.pop_back();
+    }
+  }
+
+  std::vector<std::vector<int>> BuildIndexCombinations(int n, int k) {
+    std::vector<std::vector<int>> output;
+    std::vector<int> current;
+
+    if(k <= 0 || n <= 0 || k > n)
+      return output;
+
+    BuildIndexCombinations(n, k, 0, current, output);
+    return output;
+  }
+
+  bool FitLinearCalibration(const std::vector<PeakCandidate>& peaks,
+                            const std::vector<SourceLineCandidate>& lines,
+                            double& c0,
+                            double& c1) {
+    if(peaks.size() != lines.size() || peaks.size() < 2)
+      return false;
+
+    double sumX = 0;
+    double sumY = 0;
+    double sumXX = 0;
+    double sumXY = 0;
+
+    for(size_t i = 0; i < peaks.size(); ++i) {
+      const double x = peaks[i].centroid;
+      const double y = lines[i].energy;
+
+      sumX += x;
+      sumY += y;
+      sumXX += x * x;
+      sumXY += x * y;
+    }
+
+    const double n = static_cast<double>(peaks.size());
+    const double denominator = n * sumXX - sumX * sumX;
+
+    if(std::abs(denominator) < 1e-12)
+      return false;
+
+    c1 = (n * sumXY - sumX * sumY) / denominator;
+    c0 = (sumY - c1 * sumX) / n;
+
+    return std::isfinite(c0) && std::isfinite(c1);
+  }
+
+  double CalibrationRmsResidual(const std::vector<PeakCandidate>& peaks,
+                                const std::vector<SourceLineCandidate>& lines,
+                                double c0,
+                                double c1) {
+    if(peaks.empty() || peaks.size() != lines.size())
+      return std::numeric_limits<double>::max();
+
+    double sumResidual2 = 0;
+
+    for(size_t i = 0; i < peaks.size(); ++i) {
+      const double calibrated = c0 + c1 * peaks[i].centroid;
+      const double residual = calibrated - lines[i].energy;
+      sumResidual2 += residual * residual;
+    }
+
+    return std::sqrt(sumResidual2 / static_cast<double>(peaks.size()));
+  }
+
+  bool HasReasonableLinearCalibration(const std::vector<PeakCandidate>& peaks,
+                                      const std::vector<SourceLineCandidate>& lines,
+                                      double c0,
+                                      double c1) {
+    if(peaks.size() < 2 || lines.size() < 2)
+      return false;
+
+    if(!std::isfinite(c0) || !std::isfinite(c1))
+      return false;
+
+    if(c1 <= 0)
+      return false;
+
+    const auto peakMinMax = std::minmax_element(peaks.begin(), peaks.end(),
+                                                ComparePeakByCentroid);
+    const auto lineMinMax = std::minmax_element(lines.begin(), lines.end(),
+                                                CompareSourceLineByEnergy);
+
+    const double peakSpan = peakMinMax.second->centroid - peakMinMax.first->centroid;
+    const double lineSpan = lineMinMax.second->energy - lineMinMax.first->energy;
+
+    if(peakSpan <= 0 || lineSpan <= 0)
+      return false;
+
+    const double roughSlope = lineSpan / peakSpan;
+
+    if(c1 < roughSlope * 0.25 || c1 > roughSlope * 4.0)
+      return false;
+
+    const double lowCal = c0 + c1 * peakMinMax.first->centroid;
+    const double highCal = c0 + c1 * peakMinMax.second->centroid;
+
+    if(lowCal > highCal)
+      return false;
+
+    if(highCal < 0)
+      return false;
+
+    return true;
+  }
+
+  CalibrationSolution EvaluateLinearAssignment(std::vector<PeakCandidate> peaks,
+                                               std::vector<SourceLineCandidate> lines) {
+    CalibrationSolution solution;
+
+    if(peaks.size() != lines.size() || peaks.size() < 2) {
+      solution.rejectionReason = "assignment has too few matched points";
+      return solution;
+    }
+
+    std::sort(peaks.begin(), peaks.end(), ComparePeakByCentroid);
+    std::sort(lines.begin(), lines.end(), CompareSourceLineByEnergy);
+
+    if(!FitLinearCalibration(peaks, lines, solution.c0, solution.c1)) {
+      solution.rejectionReason = "linear fit failed";
+      return solution;
+    }
+
+    if(!HasReasonableLinearCalibration(peaks, lines, solution.c0, solution.c1)) {
+      solution.rejectionReason = "linear fit failed reasonableness checks";
+      return solution;
+    }
+
+    solution.rmsResidual = CalibrationRmsResidual(peaks, lines,
+                                                  solution.c0,
+                                                  solution.c1);
+
+    double fitPenalty = 0;
+    for(const auto& peak : peaks) {
+      if(peak.chi2Ndf > 0)
+        fitPenalty += std::min(peak.chi2Ndf, 50.0) * 0.02;
+    }
+
+    
+    solution.score = solution.rmsResidual
+                   + fitPenalty
+                   - 3.0 * static_cast<double>(peaks.size());
+
+
+    solution.assignments.clear();
+    for(size_t i = 0; i < peaks.size(); ++i) {
+      CalibrationAssignment assignment;
+      assignment.peak = peaks[i];
+      assignment.line = lines[i];
+      assignment.calibratedEnergy = solution.c0 + solution.c1 * peaks[i].centroid;
+      assignment.residual = assignment.calibratedEnergy - lines[i].energy;
+      solution.assignments.push_back(assignment);
+    }
+
+    solution.valid = true;
+    return solution;
+  }
+
+  CalibrationSolution FindBestLinearSourceCalibration(std::vector<PeakCandidate> peaks,
+                                                      std::vector<SourceLineCandidate> lines,
+                                                      int minMatches) {
+    CalibrationSolution best;
+    CalibrationSolution secondBest;
+
+    std::sort(peaks.begin(), peaks.end(), ComparePeakByArea);
+    std::sort(lines.begin(), lines.end(), CompareSourceLineByIntensity);
+
+    const int maxPeaksToTry = std::min(static_cast<int>(peaks.size()), 8);
+    const int maxLinesToTry = std::min(static_cast<int>(lines.size()), 12);
+
+    peaks.resize(maxPeaksToTry);
+    lines.resize(maxLinesToTry);
+
+    std::sort(peaks.begin(), peaks.end(), ComparePeakByCentroid);
+    std::sort(lines.begin(), lines.end(), CompareSourceLineByEnergy);
+
+    const int maxMatches = std::min(maxPeaksToTry, maxLinesToTry);
+
+    for(int matchCount = maxMatches; matchCount >= minMatches; --matchCount) {
+      const auto peakCombos = BuildIndexCombinations(maxPeaksToTry, matchCount);
+      const auto lineCombos = BuildIndexCombinations(maxLinesToTry, matchCount);
+
+      for(const auto& peakCombo : peakCombos) {
+        std::vector<PeakCandidate> selectedPeaks;
+        selectedPeaks.reserve(matchCount);
+
+        for(int index : peakCombo)
+          selectedPeaks.push_back(peaks[index]);
+
+        for(const auto& lineCombo : lineCombos) {
+          std::vector<SourceLineCandidate> selectedLines;
+          selectedLines.reserve(matchCount);
+
+          for(int index : lineCombo)
+            selectedLines.push_back(lines[index]);
+
+          auto candidate = EvaluateLinearAssignment(selectedPeaks,
+                                                    selectedLines);
+
+          if(!candidate.valid)
+            continue;
+
+          if(!best.valid || candidate.score < best.score) {
+            secondBest = best;
+            best = candidate;
+          } else if(!secondBest.valid || candidate.score < secondBest.score) {
+            secondBest = candidate;
+          }
+        }
+      }
+
+      if(best.valid)
+        break;
+    }
+
+    if(best.valid && secondBest.valid) {
+      best.secondBestScore = secondBest.score;
+
+      const bool sameMatchCount =
+        best.assignments.size() == secondBest.assignments.size();
+
+      const bool closeScore =
+        secondBest.score < best.score + std::max(2.0, best.rmsResidual);
+
+      best.ambiguous = sameMatchCount && closeScore;
+    }
+
+    if(best.valid) {
+      const double maxAllowedRms = std::max(5.0, best.assignments.back().line.energy * 0.005);
+
+      if(best.rmsResidual > maxAllowedRms) {
+        best.valid = false;
+        best.rejectionReason = Form("RMS residual %.3f exceeds limit %.3f",
+                                    best.rmsResidual,
+                                    maxAllowedRms);
+      } else if(best.ambiguous) {
+        best.valid = false;
+        best.rejectionReason = "best calibration is ambiguous against second-best solution";
+      }
+    }
+
+    return best;
+  }
+
+  std::map<double, double> MatchSourceLines(std::vector<double> peaks,
+                                            std::vector<double> sourceLines) {
+    std::vector<PeakCandidate> peakCandidates;
+    peakCandidates.reserve(peaks.size());
+
+    for(double peak : peaks) {
+      PeakCandidate candidate;
+      candidate.centroid = peak;
+      candidate.area = 1.0;
+      candidate.fwhm = 1.0;
+      peakCandidates.push_back(candidate);
+    }
+
+    std::vector<SourceLineCandidate> lineCandidates;
+    lineCandidates.reserve(sourceLines.size());
+
+    for(double line : sourceLines) {
+      SourceLineCandidate candidate;
+      candidate.energy = line;
+      candidate.intensity = 1.0;
+      lineCandidates.push_back(candidate);
+    }
+
+    std::map<double, double> matched;
+    auto solution = FindBestLinearSourceCalibration(peakCandidates,
+                                                    lineCandidates,
+                                                    2);
+
+    if(!solution.valid)
+      return matched;
+
+    for(const auto& assignment : solution.assignments)
+      matched[assignment.peak.centroid] = assignment.line.energy;
+
+    return matched;
+  }
+
 }
 
 void SetFitResultCallback(GFitResultCallback callback) {
@@ -220,6 +585,261 @@ GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
 }
 
 // making calibration files
+
+bool MakeSourceCalibration(TH1* hist,
+                           const char* source,
+                           const char* calFile,
+                           int order,
+                           double sigma,
+                           double threshold,
+                           const char* unit) {
+  if(!hist)
+    hist = GrabHist();
+
+  if(!hist || hist->GetDimension() != 1) {
+    std::cout << "MakeSourceCalibration needs a 1D histogram." << std::endl;
+    return false;
+  }
+
+  if(!source || std::strlen(source) == 0) {
+    std::cout << "MakeSourceCalibration needs a source name, for example 60Co or 152Eu."
+              << std::endl;
+    return false;
+  }
+
+  if(order != 1) {
+    std::cout << "Robust source calibration currently supports linear order=1 only."
+              << std::endl;
+    return false;
+  }
+
+  GNucleus nucleus(source);
+  if(nucleus.GetNTransitions() == 0) {
+    std::cout << "No source transitions found for " << source << std::endl;
+    return false;
+  }
+
+  std::vector<SourceLineCandidate> sourceLines;
+  sourceLines.reserve(nucleus.GetNTransitions());
+
+  for(int i = 0; i < nucleus.GetNTransitions(); ++i) {
+    auto* transition = nucleus.GetTransition(i);
+    if(!transition)
+      continue;
+
+    if(transition->GetEnergy() <= 0)
+      continue;
+
+    SourceLineCandidate line;
+    line.energy = transition->GetEnergy();
+    line.energyUncertainty = transition->GetEnergyUncertainty();
+    line.intensity = transition->GetIntensity();
+    line.intensityUncertainty = transition->GetIntensityUncertainty();
+    sourceLines.push_back(line);
+  }
+
+  if(sourceLines.empty()) {
+    std::cout << "No usable source energies found for " << source << std::endl;
+    return false;
+  }
+
+  TSpectrum spectrum(100);
+  const int found = spectrum.Search(hist, sigma, "goff nodraw", threshold);
+  if(found <= 0) {
+    std::cout << "No peaks found in histogram " << hist->GetName() << std::endl;
+    return false;
+  }
+
+  std::vector<PeakCandidate> peaks;
+  peaks.reserve(found);
+
+  double* positions = spectrum.GetPositionX();
+
+  const double axisLow = hist->GetXaxis()->GetXmin();
+  const double axisHigh = hist->GetXaxis()->GetXmax();
+  const double axisWidth = axisHigh - axisLow;
+
+  std::vector<std::pair<double, double>> acceptedRanges;
+
+  for(int i = 0; i < found; ++i) {
+    const double position = positions[i];
+    const int bin = hist->GetXaxis()->FindBin(position);
+    const double binWidth = hist->GetXaxis()->GetBinWidth(bin);
+
+    const double halfWidth = std::max(3.0 * sigma * binWidth,
+                                      0.01 * axisWidth);
+
+    const double xlow = std::max(axisLow, position - halfWidth);
+    const double xhigh = std::min(axisHigh, position + halfWidth);
+
+    bool overlaps = false;
+    for(const auto& range : acceptedRanges) {
+      if(xlow < range.second && xhigh > range.first) {
+        overlaps = true;
+        break;
+      }
+    }
+
+    if(overlaps)
+      continue;
+
+    GGaus* fit = new GGaus(xlow, xhigh);
+    fit->SetName(Form("source_cal_peak_%d", static_cast<int>(peaks.size())));
+    fit->Fit(hist, "Q+no-print");
+
+    const double ndf = fit->GetNdf();
+    const double chi2Ndf = ndf > 0 ? fit->GetChi2() / ndf : 0;
+    const double centroid = fit->GetCentroid();
+    const double area = fit->GetArea();
+    const double fwhm = fit->GetFWHM();
+
+    const bool goodFit =
+      centroid >= xlow &&
+      centroid <= xhigh &&
+      area > 0 &&
+      fwhm > 0 &&
+      ndf > 0 &&
+      chi2Ndf < 25.0;
+
+    if(!goodFit) {
+      std::cout << "Rejected peak near " << position
+                << " chi2/NDF=" << chi2Ndf
+                << " area=" << area
+                << " FWHM=" << fwhm
+                << std::endl;
+      delete fit;
+      continue;
+    }
+
+    PeakCandidate peak;
+    peak.centroid = centroid;
+    peak.centroidErr = fit->GetCentroidErr();
+    peak.area = area;
+    peak.areaErr = fit->GetAreaErr();
+    peak.fwhm = fwhm;
+    peak.chi2Ndf = chi2Ndf;
+    peak.height = hist->GetBinContent(bin);
+
+    peaks.push_back(peak);
+    acceptedRanges.push_back({xlow, xhigh});
+
+    std::cout << "Accepted peak centroid=" << peak.centroid
+              << " area=" << peak.area
+              << " FWHM=" << peak.fwhm
+              << " chi2/NDF=" << peak.chi2Ndf
+              << std::endl;
+
+    delete fit;
+  }
+
+  const int minMatches = order == 2 ? 3 : 2;
+  if(static_cast<int>(peaks.size()) < minMatches) {
+    std::cout << "Only accepted " << peaks.size()
+              << " peak fits; need at least " << minMatches
+              << " for calibration."
+              << std::endl;
+    return false;
+  }
+
+  auto solution = FindBestLinearSourceCalibration(peaks, sourceLines, minMatches);
+
+  if(!solution.valid) {
+    std::cout << "Source calibration failed: "
+              << solution.rejectionReason
+              << std::endl;
+    return false;
+  }
+
+  GCalibration calibration;
+
+  for(const auto& assignment : solution.assignments) {
+    calibration.AddPoint(assignment.peak.centroid,
+                         assignment.line.energy);
+  }
+///
+   if(!calibration.Fit(order, unit))
+    return false;
+
+  const bool coefficientsFinite =
+    std::isfinite(calibration.GetC0()) &&
+    std::isfinite(calibration.GetC1()) &&
+    std::isfinite(calibration.GetC2());
+
+  const bool coefficientsAllZero =
+    calibration.GetC0() == 0 &&
+    calibration.GetC1() == 0 &&
+    calibration.GetC2() == 0;
+
+  if(!coefficientsFinite) {
+    std::cout << "Source calibration failed: non-finite calibration coefficients."
+              << std::endl;
+    return false;
+  }
+
+  if(calibration.GetC1() <= 0) {
+    std::cout << "Source calibration failed: non-positive calibration slope C1="
+              << calibration.GetC1()
+              << std::endl;
+    return false;
+  }
+
+  if(coefficientsAllZero) {
+    std::cout << "Source calibration failed: calibration coefficients are all zero."
+              << std::endl;
+    return false;
+  }
+
+
+  const auto& points = calibration.GetPoints();
+  const auto& residuals = calibration.GetResiduals();
+
+  std::cout << "Source calibration report for " << source << std::endl;
+  std::cout << "histogram: " << hist->GetName() << std::endl;
+  std::cout << "candidate peaks accepted: " << peaks.size() << std::endl;
+  std::cout << "matched lines: " << solution.assignments.size() << std::endl;
+  std::cout << "RMS residual: " << solution.rmsResidual << " " << unit << std::endl;
+  std::cout << "score: " << solution.score;
+  if(solution.secondBestScore < std::numeric_limits<double>::max())
+    std::cout << " second-best score: " << solution.secondBestScore;
+  std::cout << std::endl;
+
+  std::cout << "\tcentroid\tcalibrated\tsource\tresidual\tintensity\tarea\tFWHM\tchi2/NDF"
+            << std::endl;
+
+  for(size_t i = 0; i < solution.assignments.size(); ++i) {
+    const auto& assignment = solution.assignments[i];
+    const double calibrated = calibration.Eval(assignment.peak.centroid);
+    const double residual = i < residuals.size()
+                          ? residuals[i]
+                          : calibrated - assignment.line.energy;
+
+    std::cout << "\t"
+              << assignment.peak.centroid << "\t"
+              << calibrated << "\t"
+              << assignment.line.energy << "\t"
+              << residual << "\t"
+              << assignment.line.intensity << "\t"
+              << assignment.peak.area << "\t"
+              << assignment.peak.fwhm << "\t"
+              << assignment.peak.chi2Ndf
+              << std::endl;
+  }
+
+  std::cout << "Calibration coefficients:" << std::endl;
+  std::cout << "C0=" << calibration.GetC0()
+            << ", C1=" << calibration.GetC1()
+            << ", C2=" << calibration.GetC2()
+            << ", unit=" << calibration.GetUnit()
+            << std::endl;
+
+  if(!calibration.Save(calFile))
+    return false;
+
+  std::cout << "Wrote source calibration file: " << calFile << std::endl;
+  return true;
+}
+
+
 
 bool MakeCalibration(const char* pointsFile,
                      const char* calFile,

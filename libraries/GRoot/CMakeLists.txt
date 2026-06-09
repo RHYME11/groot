@@ -14,6 +14,8 @@ add_library(GROOTLIB SHARED
   GGlobals.cxx 
   GROI.cxx
   GCalibration.cxx
+  GTransition.cxx
+  GNucleus.cxx
 )
 
 target_include_directories(GROOTLIB PUBLIC
@@ -35,6 +37,8 @@ root_generate_dictionary(G__GROOTLIB
   GGlobals.h 
   GROI.h 
   GCalibration.h
+  GTransition.h
+  GNucleus.h
   MODULE GROOTLIB 
   LINKDEF LinkDef.h
 )
