@@ -195,6 +195,7 @@ Histomatic::Histomatic() : TGMainFrame(gClient->GetRoot(),350,780), fVf(0) {
   CreateWindow();
   SetFitResultCallback(UpdateHistomaticFitResults);
   this->SetWindowName("hist-o-matic");
+  this->SetIconName("hist-o-matic");
 
   int dh = gClient->GetDisplayHeight();
   int dw = gClient->GetDisplayWidth();
