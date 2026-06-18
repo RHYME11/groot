@@ -1,45 +1,67 @@
-<<<<<<< HEAD
-#ifndef __GTRANSITION_H__
-#define __GTRANSITION_H__
+#ifndef TTRANSITION_H
+#define TTRANSITION_H
 
-#include <TObject.h>
+/** \addtogroup Fitting Fitting & Analysis
+ *  @{
+ */
 
-#include <cmath>
 #include <cstdio>
-#include <string>
+#include <cmath>
+
+#include "TClass.h"
+#include "TObject.h"
+
+/////////////////////////////////////////////////////////////////
+///
+/// \class GTransition
+///
+/// This Class contains the information about a nuclear 
+/// transition. These transitions are a part of a TNucleus
+/// and are typically set within the TNucleus framework
+///
+/////////////////////////////////////////////////////////////////
 
 class GTransition : public TObject {
-  public:
-    GTransition();
-    virtual ~GTransition();
+   friend class TNucleus;
+   public:
+      GTransition();
+      virtual ~GTransition();
 
-    Bool_t IsSortable() const override { return kTRUE; }
+      bool IsSortable() const { return true; }
+      int Compare(const TObject* obj) const;
+      int CompareIntensity(const TObject* obj) const;
 
-    int Compare(const TObject* obj) const override;
-    int CompareIntensity(const TObject* obj) const;
+      void SetEnergy(double &tmpenergy) {fEnergy = tmpenergy;}
+      void SetEnergyUncertainty(double &tmperror){ fEngUncertainty = tmperror;}
+      void SetIntensity(double &tmpintens){fIntensity = tmpintens;}
+      void SetIntensityUncertainty(double &tmpinterror){ fIntUncertainty = tmpinterror;}
 
-    void SetEnergy(double energy) { fEnergy = energy; }
-    void SetEnergyUncertainty(double error) { fEngUncertainty = error; }
-    void SetIntensity(double intensity) { fIntensity = intensity; }
-    void SetIntensityUncertainty(double error) { fIntUncertainty = error; }
+      double GetEnergy() const {return fEnergy;}
+      double GetEnergyUncertainty() const {return fEngUncertainty;}
+      double GetIntensity() const {return fIntensity;}
+      double GetIntensityUncertainty() const {return fIntUncertainty;}
 
-    double GetEnergy() const { return fEnergy; }
-    double GetEnergyUncertainty() const { return fEngUncertainty; }
-    double GetIntensity() const { return fIntensity; }
-    double GetIntensityUncertainty() const { return fIntUncertainty; }
+      void Clear(Option_t* opt = "");
+      void Print(Option_t* opt = "") const;
 
-    void Clear(Option_t* opt = "") override;
-    void Print(Option_t* opt = "") const override;
+      std::string PrintToString();
+      const std::string Parent()  const { return fParent; } 
+      const std::string Current() const { return fCurrent; } 
 
-    std::string PrintToString() const;
 
-  private:
-    double fEnergy;
-    double fEngUncertainty;
-    double fIntensity;
-    double fIntUncertainty;
 
-  ClassDefOverride(GTransition, 0)
+
+   private:
+      double fEnergy;           //Energy of the transition
+      double fEngUncertainty;   //Uncertainty in the energy of the transition
+
+      double fIntensity;        //Intensity of the transition
+      double fIntUncertainty;   //Uncertainty in the intensity
+
+      std::string fParent;
+      std::string fCurrent;
+
+
+   ClassDef(GTransition,0) //Information about a TNucleus transition
 };
-
 #endif
