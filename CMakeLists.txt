@@ -71,11 +71,13 @@ set(RESET   "${Esc}[0m")
 add_custom_command(
   TARGET groot
   POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_CURRENT_SOURCE_DIR}/icons
+          ${CMAKE_BINARY_DIR}/icons
   COMMAND ${CMAKE_COMMAND} -E echo "-----------------------------------"
   COMMAND ${CMAKE_COMMAND} -E echo "${CYAN} goot build successfully, ${YELLOW} woo hoo! ${RESET}"
   COMMAND ${CMAKE_COMMAND} -E echo "-----------------------------------"
 )
-
 
 
 

@@ -1,4 +1,5 @@
-#ifndef __GROI_H__ 
+
+#ifndef __GROI_H__
 #define __GROI_H__ 
 
 #include<TNamed.h>
@@ -22,8 +23,29 @@ class GROI : public TNamed {
     void SetParent(TH1* parent); // { fParent = parent; }
     TH1* GetParent()  const     { return fParent; }
 
-    void SetFit(TF1* fit) { fFit = fit; }
+   // void SetFit(TF1* fit) { fFit = fit; }
+   // TF1* GetFit() const { return fFit; }
+
+    void SetRange(double x1, double x2);   // extending the fit function
+    double GetXLow() const { return xlow; }
+    double GetXHigh() const { return xhigh; }
+
+    int GetBinLow() const;
+    int GetBinHigh() const;
+    double GetCounts() const;
+    double GetIntegral() const { return GetCounts(); }
+
+    void SetFit(TF1* fit) { fFit = fit; } // non-owning
+    void AttachFit(TF1* fit) { fFit = fit; }
     TF1* GetFit() const { return fFit; }
+
+    void Remove();
+
+    static void RemoveAll(TH1* h);
+    static GROI* CreateFromMarkers(TH1* h, const char* name=nullptr);
+
+
+
 
 
     void Draw(Option_t* opt="") override;
@@ -33,7 +55,7 @@ class GROI : public TNamed {
     void ExecuteEvent(int event, int px, int py) override;
     int  DistancetoPrimitive(int px, int py) override;
 
-    static void RemoveAll(TH1* h);
+    //static void RemoveAll(TH1* h);
 
 /////
 
@@ -55,7 +77,7 @@ class GROI : public TNamed {
     void CreateFill();
     TH1* fParent; 
 
-  ClassDefOverride(GROI, 1)
+  ClassDefOverride(GROI, 2)
 
 };
 
