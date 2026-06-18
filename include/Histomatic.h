@@ -55,21 +55,8 @@ class GInfoPanel : public TGGroupFrame {
   ClassDefOverride(GInfoPanel,0)
 };
 
-class GFitResultsPanel : public TGGroupFrame {
-  public:
-    GFitResultsPanel(const TGWindow* parent);
-    virtual ~GFitResultsPanel();
 
-    void Update(const GFitResult& result);
 
-  private:
-    void AddRow(const std::string& key, const std::string& value);
-    void SetRow(const std::string& key, const std::string& value);
-
-    std::map<std::string, TGLabel*> fRows;
-
-  ClassDefOverride(GFitResultsPanel,0)
-};
 
 class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainFrame {
   //RQ_OBJECT("Histomatic");
@@ -88,7 +75,6 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
 
     void buttonAction();
     void SetStatusText(std::string text, int col) { fStatusBar->SetText(text.c_str(),col); }
-    void showKeyboardShortcutHelp();
 
   //private:
     void doUpdate() const;
@@ -150,7 +136,6 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
     GListTree          *fGListTree;
   
     GInfoPanel          *fInfoPanel;
-    GFitResultsPanel    *fFitResultsPanel;
     TGStatusBar        *fStatusBar;
 
   public:
@@ -180,9 +165,6 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
 
     void UpdateInfoPanel() { if(fInfoPanel) fInfoPanel->Update(GetLastInteractionInfo()); }
     TGStatusBar *GetStatusBar() { return fStatusBar; } 
-
-    void UpdateFitResults(const GFitResult& result) {
-    if(fFitResultsPanel) fFitResultsPanel->Update(result); }
 
   private:
     //TGMainFrame *fMainWindow;

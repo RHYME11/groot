@@ -8,26 +8,10 @@ class TH1;
 class TH1D;
 class TF1;
 class TGraph;
-class TGraphErrors;
 class GGaus;
 class GPeak;
 
 typedef const char Option_t;
-
-struct GFitResult {
-  const char* histName = "";
-  const char* fitName = "";
-  double centroid = 0;
-  double fwhm = 0;
-  double area = 0;
-  double areaErr = 0;
-  double chi2 = 0;
-  double ndf = 0;
-  double xlow = 0;
-  double xhigh = 0;
-};
-
-typedef void (*GFitResultCallback)(const GFitResult&);
 
 struct GInteractionInfo {
   TVirtualPad* pad = nullptr;
@@ -51,11 +35,6 @@ struct GInteractionInfo {
 GPeak *PhotoPeakFit(TH1*,double,double,Option_t *opt="");
 GGaus *GausFit(TH1*,double,double,Option_t *opt="");
 
-int AutoFitPeaks(TH1* hist=nullptr,
-		double threshold = .10,
-		double sigma = 1.0,
-		int maxPeaks = 50);
-
 TH1D  *ResidualHist(TH1* hist, TF1* fit=nullptr);
 void   DrawResiduals(TH1* hist, TF1* fit=nullptr,bool normalized=true);
 
@@ -67,32 +46,7 @@ TObject *GrabPlottable(int i=0);    //return the ith plottable (th1 or tgraph) t
 
 void ls(int n=0); 
 
-void ShowKeyboardShortcutHelp(); ///help box
-void SetFitResultCallback(GFitResultCallback callback); 
-
 void SaveAllCuts(TH1*,const char* fname="output.cuts",Option_t *opt="recreate");
-
-bool MakeCalibration(const char* pointsFile,
-		     const char* calFile="calibration.cal",
-		     int order=1,
-		     const char* unit="keV");
-
-bool MakeSourceCalibration(TH1* hist,
-		     const char* source,
-		     const char* calFile="calibration.cal",
-		     int order=1,
-			double sigma=2.0,
-			double threshold= 0.05,
-			const char* unit="keV");
-
-
-TH1D* ApplyCalibration(TH1* hist=nullptr,
-		     const char* calFile="calibration.cal",
-		     const char* name=nullptr); 
-
-TGraphErrors* DrawCalibrationResiduals(const char* pointsFile,
-				       int order = 1,
-				       const char* unit="keV");
 
 double GetChi2(TObject*,TF1*);
 
