@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #ifndef __GTRANSITION_H__
 #define __GTRANSITION_H__
 
