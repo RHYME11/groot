@@ -15,3 +15,138 @@ TH1:
           Select a pad;
           If the pad was selected already and a TH1 exsits, copy the selected histogram and draw in a new canvas;
           
+
+
+
+
+
+
+Keyboard shortcuts:
+
+  ?      Open shortcut help
+  g      Gaussian fit / 2D gate from markers
+  b      Show background
+  B      Toggle background
+  s      Show peaks
+  x/y    Project 2D histogram onto X/Y
+  p      Project selected marked range
+  w/q    Rebin / unbin by 2
+  m      Remove markers
+  o      Unzoom axes
+  z/l    Toggle log scale
+
+
+
+
+Interactive ROI Tool
+
+The ROI tool lets users define a region of interest on a 1D histogram. Place two markers on the histogram, then press `r` to create an ROI between those marker positions.
+
+When an ROI is created, the selected x-range is shaded on the histogram and a short summary is printed:
+
+  created ROI_0 [xlow, xhigh] counts=...
+
+The `counts` value is the sum of all bin contents inside the ROI. In physics terms, this is the total number of detected events in that selected region. If the ROI surrounds a peak, this is the gross peak area, including both signal and background.
+
+Press `R` to remove all ROIs from the current histogram.
+
+ROIs automatically update their shaded range when the histogram is rebinned or unbinned.
+
+
+
+
+==Energy Calibration Protocol==
+
+1. Measure a known calibration source.
+
+   Use a source with well-known gamma-ray energies, such as Co-60,
+   Cs-137, Na-22, Ba-133, or Eu-152.
+
+2. Open the uncalibrated spectrum.
+
+   Start Groot and load the spectrum in channel space.
+
+3. Find the calibration peaks.
+
+   Use peak labels or manual fitting to identify the channel position
+   of each known gamma-ray peak.
+
+   Example Co-60 lines:
+     1173.2 keV
+     1332.5 keV
+
+4. Create a calibration points file.
+
+   Make a plain text file with one calibration point per line:
+
+     measured_channel known_energy
+
+   Example:
+
+     429.8  1173.2
+     488.6  1332.5
+
+   Optional uncertainties may be added as third and fourth columns:
+
+     measured_channel known_energy channel_uncertainty energy_uncertainty
+
+5. Generate a .cal file.
+
+   In Groot, run:
+
+     MakeCalibration("channelenergy.dat", "test.cal", 1)
+
+   Use order 1 for a linear calibration:
+
+     E = C0 + C1 * channel
+
+   Use order 2 for a quadratic calibration:
+
+     E = C0 + C1 * channel + C2 * channel^2
+
+   Example quadratic command:
+
+     MakeCalibration("channelenergy.dat", "test.cal", 2)
+
+6. Check calibration residuals.
+
+   Run:
+
+     DrawCalibrationResiduals("channelenergy.dat", 1)
+
+   The residual plot shows:
+
+     fitted_energy - known_energy
+
+   A good calibration should have residuals close to zero with no clear
+   curved trend. If the residuals are poor, check the peak assignments or
+   try a different calibration order.
+
+7. Apply the calibration.
+
+   To apply calibration while loading a .txt3 file:
+
+     ./bin/groot -g test.cal path/to/spectrum.txt3
+
+   To apply calibration to an already-open 1D histogram in Groot:
+
+     ApplyCalibration(GrabHist(), "test.cal")
+
+8. Verify the calibrated spectrum.
+
+   The new calibrated histogram should have its x-axis labeled in the
+   calibration unit, usually keV.
+
+   Known peaks should now appear near their expected energies.
+
+9. Save and reuse the .cal file.
+
+   The .cal file stores:
+
+     C0
+     C1
+     C2
+     unit
+
+   Reuse this file for spectra measured with the same detector setup and
+   acquisition conditions.

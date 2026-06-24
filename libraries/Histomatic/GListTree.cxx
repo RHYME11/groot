@@ -18,9 +18,49 @@
 
 #include <GGlobals.h>
 
+#include <cstdlib>
+
 // want to remove....
 #include <Histomatic.h>
 #include <GG.h>
+
+namespace {
+
+const TGPicture *GetPictureFromPath(const std::string &path) {
+  if(!fileExists(path.c_str()))
+    return nullptr;
+
+  return gClient->GetPicture(path.c_str());
+}
+
+const TGPicture *GetPictureFromDirectory(const std::string &directory, const char *basename) {
+  const TGPicture *picture = GetPictureFromPath(directory + "/" + basename + ".xpm");
+  if(picture)
+    return picture;
+
+  return GetPictureFromPath(directory + "/" + basename + ".gif");
+}
+
+const TGPicture *GetIconPicture(const char *basename) {
+  std::vector<std::string> directories;
+
+  if(const char *gsys = std::getenv("GSYS"))
+    directories.push_back(std::string(gsys) + "/icons");
+
+  directories.push_back(programPath() + "/../icons");
+
+  if(const char *pwd = std::getenv("PWD"))
+    directories.push_back(std::string(pwd) + "/icons");
+
+  for(const auto &directory : directories) {
+    if(const TGPicture *picture = GetPictureFromDirectory(directory, basename))
+      return picture;
+  }
+
+  return nullptr;
+}
+
+} // namespace
 
 ClassImp(GListTreeCanvas);
 
@@ -63,9 +103,9 @@ void GListTree::InsertObject(TObject *obj,TGListTreeItem *parent) {
 
 
   const TGPicture *icon = GetIcon(cls);
-  if(icon==0) return;
 
-  TGListTreeItem *item = this->AddItem(parent,obj->GetName(),icon,icon);
+  TGListTreeItem *item = icon ? this->AddItem(parent,obj->GetName(),icon,icon)
+                              : this->AddItem(parent,obj->GetName());
   if(obj->IsFolder()) {
     if(obj->IsA() == TKey::Class()) //now read the object... 
       obj = ((TKey*)obj)->ReadObj(); 
@@ -94,28 +134,20 @@ void GListTree::InsertObject(TObject *obj,TGListTreeItem *parent) {
 }
 
 const TGPicture *GListTree::GetIcon(TClass *cls) {
-  std::string path = programPath();
-  path+="/../icons";
   //printf("GetIcon:\t%s\n",cls->GetName());
 
   if(cls->InheritsFrom(TFile::Class())) {
-    path+="/rootdb_t.gif";
-    return gClient->GetPicture(path.c_str());
+    return GetIconPicture("rootdb_t");
   } else if(cls->InheritsFrom(TDirectory::Class())) { 
-    path+="/folder_t.gif";
-    return gClient->GetPicture(path.c_str());
+    return GetIconPicture("folder_t");
   } else if(cls->InheritsFrom(TH2::Class())) { 
-    path+="/h2_t.gif";
-    return gClient->GetPicture(path.c_str());
+    return GetIconPicture("h2_t");
   } else if(cls->InheritsFrom(TH1::Class())) { 
-    path+="/hdb_t.gif";
-    return gClient->GetPicture(path.c_str());
+    return GetIconPicture("hdb_t");
   } else if(cls->InheritsFrom(TGraph::Class())) {
-    path+="/selection_t.gif";
-    return gClient->GetPicture(path.c_str());
+    return GetIconPicture("selection_t");
   }
-  path+="/folder_t.gif";
-  return gClient->GetPicture(path.c_str());
+  return GetIconPicture("folder_t");
 
 }
 
@@ -409,4 +441,3 @@ bool GListTree::IsDrawable(const TGListTreeItem *item) const {
   //return false;
 
 }
-

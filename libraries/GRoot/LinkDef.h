@@ -11,6 +11,7 @@
 #pragma link C++ global gHistomatic;
 
 #pragma link C++ function GausFit;
+#pragma link C++ function AutoFitPeaks;
 #pragma link C++ function PhotoPeakFit;
 #pragma link C++ function GrabHist;
 #pragma link C++ function GrabFit;
@@ -22,6 +23,11 @@
 #pragma link C++ function ls;
 
 #pragma link C++ function SaveAllCuts;
+
+#pragma link C++ function MakeCalibration;
+#pragma link C++ function MakeSourceCalibration;
+#pragma link C++ function DrawCalibrationResiduals;
+#pragma link C++ function ApplyCalibration;
 
 #pragma link C++ function GetSignals;
 
@@ -39,6 +45,5 @@
 #pragma link C++ class GPeak+;
 #pragma link C++ class GPeak2+;
 #pragma link C++ class GROI+;
-
 
 #endif

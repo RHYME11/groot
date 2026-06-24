@@ -7,7 +7,8 @@ enum kFileType {
   ROOTFILE         = 256,
   MACRO            = 257,
   CALIBRATION      = 512,
-  CUTS             = 2052
+  CUTS             = 2052,
+  TXT3             = 513
 };
 
 

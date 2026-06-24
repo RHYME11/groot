@@ -11,6 +11,8 @@
 #include <GFunctions.h>
 
 class TFile;
+class TH1D;
+
 
 class Gint : public TRint {
   private:
@@ -30,10 +32,19 @@ class Gint : public TRint {
     kFileType DetermineFileType(const std::string& filename) const;
     //bool      FileAutoDetect(const std::string& filename);
     TFile*    OpenRootFile(const std::string& filename, Option_t *opt="");
+    TH1D*     OpenTxt3File(const std::string& filname);
+    bool        LoadCalibrationFile(const std::string& filname);
 
     void      LoadStyle();    
 
   private:
+
+    double fCalC0;
+    double fCalC1;
+    double fCalC2;
+    std::string fCalUnit;
+    bool fHasCalibration;
+
     int fRootFilesOpened;
     bool fTabLock;
 

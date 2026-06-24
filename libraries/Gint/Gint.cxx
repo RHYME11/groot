@@ -5,6 +5,14 @@
 #include <TStyle.h>
 #include <TEnv.h>
 
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <TH1D.h>
+#include <TMemFile.h>
+#include <TParameter.h>
+#include <TObjString.h>
+
 #include <Gint.h>
 #include <Gtypes.h>
 #include <argParser.h>
@@ -17,6 +25,7 @@ Gint *Gint::fGint = 0;
 
 //Gint::Gint(int argc, char **argv) : TRint("gint",&argc,argv,0,0,true,false) {
 Gint::Gint(int argc, char **argv) : TRint("gint",0,0,0,0,true,false), 
+  fCalC0(0), fCalC1(1), fCalC2(0), fCalUnit("keV"), fHasCalibration(false),
   fRootFilesOpened(0), fTabLock(false), fMainThreadId(std::this_thread::get_id())  {
 
   LoadOptions(argc,argv);
@@ -122,6 +131,7 @@ void Gint::LoadOptions(int argc, char **argv) {
   for(auto& file : input_files){
     switch(DetermineFileType(file)){
       case kFileType::CALIBRATION:
+	LoadCalibrationFile(file);
         break;
       case kFileType::ROOTFILE:
         {
@@ -129,6 +139,21 @@ void Gint::LoadOptions(int argc, char **argv) {
           if(rfile && doGui && gHistomatic) 
             gHistomatic->AddRootFile(rfile);
         }
+        break;
+      case kFileType::TXT3:
+        {
+	  TH1D *hist = OpenTxt3File(file);
+	  if(hist && doGui && gHistomatic) {
+     		std::string name = file.substr(file.find_last_of("/\\") + 1);
+     		name += ".root";
+
+     		TMemFile *memfile = new TMemFile(name.c_str(), "RECREATE");
+     		memfile->cd();
+     		hist->Write();
+
+      		gHistomatic->AddRootFile(memfile);
+	    }
+	}
         break;
       case kFileType::MACRO:
         break;
@@ -153,7 +178,7 @@ kFileType Gint::DetermineFileType(const std::string& filename) const {
     std::string remaining = filename.substr(0,dot);
     ext = remaining.substr(remaining.find_last_of('.')+1);
   }
-  
+ 
   if(ext == "cal") {
     return kFileType::CALIBRATION;
   } else if(ext == "root") {
@@ -164,6 +189,8 @@ kFileType Gint::DetermineFileType(const std::string& filename) const {
     return kFileType::MACRO;
   } else if(ext == "cuts") {
     return kFileType::CUTS;
+  } else if(ext == "txt3") {
+    return kFileType::TXT3;
   } else {
     return kFileType::UNKNOWN;
   }
@@ -188,6 +215,157 @@ bool Gint::FileAutoDetect(const std::string& filename) {
   return true;
 }
 */
+
+bool Gint::LoadCalibrationFile(const std::string& filename) {
+  std::ifstream input(filename);
+  if(!input.is_open()) {
+    std::cout << "Could not open calibration file: " << filename << std::endl;
+    return false;
+  }
+
+  std::string line;
+  while(std::getline(input, line)) {
+    if(line.empty()) {
+      continue;
+    }
+
+    if(line.find("C0") != std::string::npos) {
+      sscanf(line.c_str(), "C0 = %lf", &fCalC0);
+    } else if(line.find("C1") != std::string::npos) {
+      sscanf(line.c_str(), "C1 = %lf", &fCalC1);
+    } else if(line.find("C2") != std::string::npos) {
+      sscanf(line.c_str(), "C2 = %lf", &fCalC2);
+    } else if(line.find("unit") != std::string::npos) {
+      size_t unitPos = line.find("=");
+      if(unitPos != std::string::npos) {
+        fCalUnit = line.substr(unitPos + 1);
+        while(!fCalUnit.empty() && fCalUnit[0] == ' ') {
+          fCalUnit.erase(0, 1);
+        }
+      }
+    }
+  }
+
+  fHasCalibration = true;
+
+  std::cout << "\tloaded calibration: "
+            << "C0=" << fCalC0
+            << ", C1=" << fCalC1
+            << ", C2=" << fCalC2
+            << ", unit=" << fCalUnit
+            << std::endl;
+
+  return true;
+}
+
+
+
+
+
+TH1D* Gint::OpenTxt3File(const std::string& filename) {
+  std::ifstream input(filename);
+  if(!input.is_open()) {
+    std::cout << "Could not open txt3 file: " << filename << std::endl;
+    return nullptr;
+  }
+
+  std::vector<double> channels;
+  std::vector<double> counts;
+  std::vector<double> energies;
+
+  double c0 = 0;
+  double c1 = 1;
+  double c2 = 0;
+  std::string unit = "keV";
+
+  std::string line;
+  while(std::getline(input, line)) {
+    if(line.empty()) {
+      continue;
+    }
+
+    if(line.find("C0") != std::string::npos) {
+      sscanf(line.c_str(), "C0 = %lf; C1 = %lf; C2 = %lf;", &c0, &c1, &c2);
+      
+	size_t unitPos = line.find("unit =");
+	if(unitPos != std::string::npos) {
+	  unit = line.substr(unitPos + 6);
+	  while(!unit.empty() && unit[0] == ' ') {
+	  unit.erase(0,1);
+	}
+	}
+	continue;
+    }
+
+    if(line.find("RealTime") != std::string::npos ||
+       line.find("LiveTime") != std::string::npos) {
+      continue;
+    }
+
+    std::stringstream ss(line);
+    double channel = 0;
+    double count = 0;
+    double energy = 0;
+
+    if(ss >> channel >> count >> energy) {
+      channels.push_back(channel);
+      counts.push_back(count);
+      energies.push_back(energy);
+    }
+  }
+
+  if(counts.empty()) {
+    std::cout << "No spectrum data found in txt3 file: " << filename << std::endl;
+    return nullptr;
+  }
+
+  //int nBins = counts.size();
+  //double xMin = energies.front() - 0.5;
+  //double xMax = energies.back() + 0.5;
+
+  //TH1D* hist = new TH1D("txt3_spectrum", filename.c_str(), nBins, xMin, xMax);
+
+  if(fHasCalibration) {
+	c0 = fCalC0;
+	c1 = fCalC1;
+	c2 = fCalC2;
+	unit = fCalUnit;
+  }
+
+  int nBins = counts.size();
+
+  std::vector<double> binEdges;
+  binEdges.reserve(nBins + 1);
+
+  for(int i = 0; i <= nBins; ++i) { 
+    double channelEdge = channels.front() - 0.5 + i;
+    double energyEdge = c0 + c1 * channelEdge + c2 * channelEdge * channelEdge;
+    binEdges.push_back(energyEdge);
+  }
+
+  TH1D* hist = new TH1D("TXT3 -_- Spectrum", filename.c_str(), nBins, binEdges.data());
+  
+  hist->GetListOfFunctions()->Add(new TParameter<double>("C0", c0));
+  hist->GetListOfFunctions()->Add(new TParameter<double>("C1", c1));
+  hist->GetListOfFunctions()->Add(new TParameter<double>("C2", c2));
+  hist->GetListOfFunctions()->Add(new TObjString(("unit=" + unit).c_str()));
+
+  hist->GetXaxis()->SetTitle(unit.c_str());
+  hist->GetYaxis()->SetTitle("Counts");
+
+  for(int i = 0; i < nBins; ++i) {
+    hist->SetBinContent(i + 1, counts[i]);
+  }
+
+  std::cout << "\topened txt3 spectrum: " << filename << std::endl;
+  return hist;
+}
+
+
+
+
+
+
 
 TFile *Gint::OpenRootFile(const std::string& filename, Option_t* opt) {
   TString sopt(opt);

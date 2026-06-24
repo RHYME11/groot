@@ -9,6 +9,7 @@
 #pragma link C++ class GListTreeCanvas+;
 #pragma link C++ class GListTree+;
 #pragma link C++ class GInfoPanel+;
+#pragma link C++ class GFitResultsPanel+;
 
 #pragma link C++ class GG+;
 

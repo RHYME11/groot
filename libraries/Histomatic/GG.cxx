@@ -78,6 +78,7 @@ void GG::CreateWindow() {
   }
 
   SetWindowName("GG");
+  SetIconName("GG");
 
   fVFrame = new TGVerticalFrame(this, 100, 100);
 
@@ -201,7 +202,6 @@ void GG::doDraw(std::vector<TGListTreeItem*> selected, Option_t *opt) const {
   }
 
 }
-
 
 
 
