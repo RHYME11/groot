@@ -421,7 +421,14 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
         const bool ctrlPressed = GCanvas::GetCurrentEvent().fState & kKeyControlMask;
 
         GMarker *marker = new GMarker();
-        marker->SetType(GMarkerType::kPrimary);
+        // Once a 2D cut has been started, further clicks add vertices rather
+        // than replacing the temporary range selection.
+        GMarkerType type = GMarkerType::kPrimary;
+        if(currentHist->GetDimension() == 2 &&
+           !GMarker::Get(currentHist,GMarkerType::kCut).empty()) {
+          type = GMarkerType::kCut;
+        }
+        marker->SetType(type);
         marker->AddTo(currentHist,info.x,info.y,ctrlPressed);
         //gPad->Modified();
         info.modified = true;
@@ -462,11 +469,33 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
       }
       break;
     case kKey_c:
-      if(markers.size()>1 && currentHist->GetDimension()==1) {
-        markers.at(0)->SetType(GMarkerType::kBackground);
-        markers.at(1)->SetType(GMarkerType::kBackground);
+      if(currentHist->GetDimension()==1) {
+        auto* projection = dynamic_cast<GH1D*>(currentHist);
+        auto* parent = projection ? dynamic_cast<GH2D*>(projection->GetParent()) : nullptr;
+        if(!parent) {
+          printf("Background ranges are only available on projections from a 2D histogram.\n");
+          break;
+        }
+        if(markers.size()!=2) {
+          printf("Select exactly two primary markers before setting a background range.\n");
+          break;
+        }
+        // A background selection is one explicit interval. Replacing it keeps
+        // the subsequent projection operation unambiguous.
+        for(auto* marker : GMarker::GetBG(currentHist))
+          marker->Remove();
+        for(auto* marker : markers)
+          marker->SetType(GMarkerType::kBackground);
+        printf("Background range set: %.3f to %.3f\n",
+               markers.at(0)->X(),markers.at(1)->X());
         info.modified = true;
         //gPad->Modified();
+      } else if(currentHist->GetDimension()==2 && !markers.empty()) {
+        // Start cut-vertex mode. Subsequent clicks add kCut vertices until
+        // the cut is created with 'g' or cleared with 'm'.
+        for(auto* marker : markers)
+          marker->SetType(GMarkerType::kCut);
+        info.modified = true;
       }
       break;
     case kKey_e:
@@ -492,9 +521,11 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
         //gPad->Modified();
         info.modified = true;
         //GMarker::RemoveAll(currentHist);
-      } else if(currentHist->GetDimension()==2 && markers.size()>1) {
+      } else if(currentHist->GetDimension()==2) {
         static int gGateCounter = 0;
-        TCutG *cut = GMarker::MakeTCutG(currentHist);    
+        TCutG *cut = GMarker::MakeTCutG(currentHist,GMarkerType::kCut);
+        if(!cut)
+          break;
         cut->SetName(Form("cut%i",gGateCounter++));
 
         currentHist->GetListOfFunctions()->Add(cut);
@@ -549,6 +580,11 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
             GH1D *proj =0;
             //printf("markers.size() = %i\n",int(markers.size()));
             //printf("bgmarkers.size() = %i\n",int(bgmarkers.size()));
+            if(!bgmarkers.empty() && bgmarkers.size()!=2) {
+              printf("Background selection is invalid: expected one range (two markers), found %zu.\n",
+                     bgmarkers.size());
+              break;
+            }
             if(bgmarkers.size()==2) {
               double bgxlow  = bgmarkers.at(0)->X();
               double bgxhigh = bgmarkers.at(1)->X();
@@ -563,8 +599,8 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
               else
                 proj = parent->ProjectionX(xlow,xhigh);
             }
-            //new GCanvas;
-            proj->Draw();
+            if(proj)
+              proj->Draw();
           }
         }
       }
@@ -651,6 +687,3 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
 
   return true;
 }
-
-
-
