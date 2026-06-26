@@ -20,6 +20,10 @@
 #include<GH1D.h>
 #include<GH2D.h>
 
+namespace {
+TVirtualPad* gRequestedCurrentPad = nullptr;
+}
+
 
 GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(!hist)
@@ -27,8 +31,9 @@ GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(xlow>xhigh)
     std::swap(xlow,xhigh);
 
+  const std::string requestedOptions = opt ? opt : "";
   GGaus *mypeak= new GGaus(xlow,xhigh);
-  std::string options = opt;
+  std::string options = requestedOptions;
   options.append("Q+");
   mypeak->Fit(hist,options.c_str());
   //mypeak->Background()->Draw("SAME");
@@ -36,7 +41,8 @@ GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   //hist->GetListOfFunctions()->Add(bg);
 
   double chi2 = GetChi2(hist,mypeak);
-  printf("Cal chi2 = %.03f\n",chi2);
+  if(requestedOptions.find("no-print") == std::string::npos)
+    printf("Cal chi2 = %.03f\n",chi2);
 
   return mypeak;
 }
@@ -47,8 +53,9 @@ GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(xlow>xhigh)
     std::swap(xlow,xhigh);
 
+  const std::string requestedOptions = opt ? opt : "";
   GPeak *mypeak= new GPeak((xlow+xhigh)/2.0,xlow,xhigh);
-  std::string options = opt;
+  std::string options = requestedOptions;
   options.append("Q+");
   mypeak->Fit(hist,options.c_str());
   //mypeak->Background()->Draw("SAME");
@@ -56,7 +63,8 @@ GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   //hist->GetListOfFunctions()->Add(bg);
 
   double chi2 = GetChi2(hist,mypeak);
-  printf("Cal chi2 = %.03f\n",chi2);
+  if(requestedOptions.find("no-print") == std::string::npos)
+    printf("Cal chi2 = %.03f\n",chi2);
 
   return mypeak;
 }
@@ -67,6 +75,11 @@ TH1 *GrabHist(int i)  {
   TH1 *hist = 0;
   if(!gPad)
     return hist;
+
+  // GrabHist intentionally follows gPad. Commands that create a new canvas
+  // from a TExec should call RequestCurrentPad(); GCanvas applies that request
+  // after ROOT's HandleInput restores its saved pad. This keeps the prompt's
+  // current pad correct without adding hidden histogram state here.
   TIter iter(gPad->GetListOfPrimitives());
   int j=0;
   while(TObject *obj = iter.Next()) {
@@ -77,11 +90,34 @@ TH1 *GrabHist(int i)  {
       }
       j++;
     } else if(obj->InheritsFrom(THStack::Class())) {
-      hist = ((THStack*)obj)->GetHistogram();
-      break;
+      TList* hists = static_cast<THStack*>(obj)->GetHists();
+      if(!hists)
+        continue;
+      TIter stackIter(hists);
+      while(TObject* stackObj = stackIter.Next()) {
+        if(!stackObj->InheritsFrom(TH1::Class()))
+          continue;
+        if(j==i) {
+          hist = static_cast<TH1*>(stackObj);
+          break;
+        }
+        j++;
+      }
+      if(hist)
+        break;
     }
   }
   return hist;
+}
+
+void RequestCurrentPad(TVirtualPad* pad) {
+  gRequestedCurrentPad = pad;
+}
+
+TVirtualPad* TakeRequestedCurrentPad() {
+  TVirtualPad* pad = gRequestedCurrentPad;
+  gRequestedCurrentPad = nullptr;
+  return pad;
 }
 
 TObject *GrabPlottable(int i) { 
@@ -641,8 +677,9 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
         currentHist->GetXaxis()->UnZoom();
         GH1D *px = dynamic_cast<GH2D*>(currentHist)->ProjectionX();
         px->SetBit(GH1D::kProjectionX,1);
-        new GCanvas;
+        GCanvas *canvas = new GCanvas;
         px->Draw();
+        RequestCurrentPad(canvas);
       }
       break;
    case kKey_X:
@@ -658,8 +695,9 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
         currentHist->GetYaxis()->UnZoom();
         GH1D *py = dynamic_cast<GH2D*>(currentHist)->ProjectionY();
         py->SetBit(GH1D::kProjectionX,0);
-        new GCanvas;
+        GCanvas *canvas = new GCanvas;
         py->Draw();
+        RequestCurrentPad(canvas);
       }
       break;
     case kKey_l:

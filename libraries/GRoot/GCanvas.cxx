@@ -191,8 +191,12 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
 
 
 
-  if(!GetSelected()) 
-    return TCanvas::HandleInput(event,px,py);
+  if(!GetSelected()) {
+    TCanvas::HandleInput(event,px,py);
+    if(TVirtualPad* requestedPad = TakeRequestedCurrentPad())
+      requestedPad->cd();
+    return;
+  }
 
   
   //printf("GetSelected()->IsA()->GetName() = %s\n",GetSelected()->IsA()->GetName());
@@ -245,6 +249,9 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
     TCanvas::HandleInput(event,px,py);
   else 
     UpdateAllPads();
+
+  if(TVirtualPad* requestedPad = TakeRequestedCurrentPad())
+    requestedPad->cd();
 }
 
 
@@ -302,15 +309,11 @@ bool GCanvas::HandleArrowPress(EEventType event, int px, int py,int mask) {
       } 
       break;
     case kKey_Up:
-      printf("I AM HERE 0 \n");
       if(currentHist && currentHist->InheritsFrom(GH1D::Class())) {
         GH1D *gcurrentHist = dynamic_cast<GH1D*>(currentHist);
-            printf("i am here!! 1\n");
         if(gcurrentHist->GetParent()) {
-            printf("i am here!! 2\n");
           TH2* p = gcurrentHist->GetParent();
           if(p && p->InheritsFrom(GH2D::Class())) {
-            printf("i am here!! 3\n");
             GH1D* hnext = dynamic_cast<GH2D*>(p)->Next(gcurrentHist);
             if(hnext) {
               hnext->Draw();
@@ -432,6 +435,5 @@ void GCanvas::Divide(int nx,int ny,float xmargin,float ymargin,int color) {
       static_cast<TPad*>(obj)->AddExec("groot_interact","GRootInteract()");
 
 }
-
 
 
