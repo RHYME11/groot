@@ -1,6 +1,7 @@
 
 #include<GMarker.h>
 
+#include<algorithm>
 #include<iostream>
 
 #include<TH1.h>
@@ -15,6 +16,77 @@
 
 #include<vector>
 
+namespace {
+
+const char* MarkerTypeName(GMarkerType type) {
+  switch(type) {
+    case GMarkerType::kPrimary:
+      return "Primary";
+    case GMarkerType::kBackground:
+      return "Background";
+    case GMarkerType::kZoom:
+      return "Zoom";
+    case GMarkerType::kFit:
+      return "Fit";
+    case GMarkerType::kCut:
+      return "Cut";
+    case GMarkerType::kProjection:
+      return "Projection";
+    case GMarkerType::kAll:
+    default:
+      return "Primary";
+  }
+}
+
+Color_t DefaultMarkerColor(GMarkerType type) {
+  switch(type) {
+    case GMarkerType::kBackground:
+      return kAzure + 2;
+    case GMarkerType::kZoom:
+      return kGreen + 2;
+    case GMarkerType::kFit:
+      return kViolet + 1;
+    case GMarkerType::kCut:
+      return kOrange + 7;
+    case GMarkerType::kProjection:
+      return kMagenta + 1;
+    case GMarkerType::kAll:
+    case GMarkerType::kPrimary:
+    default:
+      return kRed;
+  }
+}
+
+Style_t DefaultLineStyle(GMarkerType type) {
+  switch(type) {
+    case GMarkerType::kBackground:
+    case GMarkerType::kZoom:
+      return kDashed;
+    case GMarkerType::kProjection:
+      return kDotted;
+    case GMarkerType::kAll:
+    case GMarkerType::kPrimary:
+    case GMarkerType::kFit:
+    case GMarkerType::kCut:
+    default:
+      return kSolid;
+  }
+}
+
+double DefaultMarkerSize(GMarkerType type) {
+  return type == GMarkerType::kCut ? 0.65 : 1.1;
+}
+
+int MarkerEnvInt(GMarkerType type,const char* field,int defaultValue) {
+  return gEnv->GetValue(Form("GMarker.%s.%s",MarkerTypeName(type),field),defaultValue);
+}
+
+double MarkerEnvDouble(GMarkerType type,const char* field,double defaultValue) {
+  return gEnv->GetValue(Form("GMarker.%s.%s",MarkerTypeName(type),field),defaultValue);
+}
+
+} // namespace
+
 int GMarker::GetMaxMarkers(GMarkerType type) { 
   switch(type) {
     case GMarkerType::kPrimary:
@@ -24,7 +96,7 @@ int GMarker::GetMaxMarkers(GMarkerType type) {
     case GMarkerType::kZoom:
       return gEnv->GetValue("GMarker.Zoom.Max",2);
     case GMarkerType::kFit:
-      return gEnv->GetValue("GMarker.Fit.Max",2);
+      return gEnv->GetValue("GMarker.Fit.Max",-1);
     case GMarkerType::kCut:
       // Polygon-gate vertices should not silently displace earlier vertices.
       return gEnv->GetValue("GMarker.Cut.Max",-1);
@@ -85,45 +157,26 @@ void GMarker::SetType(GMarkerType type) {
 }
 
 void GMarker::UpdateStyle() {
-  Color_t color = kRed;
-  Style_t style = kSolid;
-
-  switch(fType) {
-    case GMarkerType::kBackground:
-      color = kAzure + 2;
-      style = kDashed;
-      break;
-    case GMarkerType::kZoom:
-      color = kGreen + 2;
-      style = kDashed;
-      break;
-    case GMarkerType::kFit:
-      color = kViolet + 1;
-      break;
-    case GMarkerType::kCut:
-      color = kOrange + 7;
-      break;
-    case GMarkerType::kProjection:
-      color = kMagenta + 1;
-      style = kDotted;
-      break;
-    case GMarkerType::kAll:
-    case GMarkerType::kPrimary:
-      break;
-  }
+  Color_t color = MarkerEnvInt(fType,"Color",DefaultMarkerColor(fType));
+  Style_t style = MarkerEnvInt(fType,"Style",DefaultLineStyle(fType));
+  Width_t width = MarkerEnvInt(fType,"Width",2);
+  Style_t markerStyle = MarkerEnvInt(fType,"MarkerStyle",kFullCircle);
+  Size_t markerSize = MarkerEnvDouble(fType,"MarkerSize",DefaultMarkerSize(fType));
 
   if(fLineX) {
     fLineX->SetLineColor(color);
     fLineX->SetLineStyle(style);
+    fLineX->SetLineWidth(width);
   }
   if(fLineY) {
     fLineY->SetLineColor(color);
     fLineY->SetLineStyle(style);
+    fLineY->SetLineWidth(width);
   }
   if(fPoint) {
     fPoint->SetMarkerColor(color);
-    fPoint->SetMarkerStyle(kFullCircle);
-    fPoint->SetMarkerSize(1.1);
+    fPoint->SetMarkerStyle(markerStyle);
+    fPoint->SetMarkerSize(markerSize);
   }
 }
 
@@ -164,8 +217,11 @@ void GMarker::PaintBackgroundRegion() const {
   y.push_back(baseline);
 
   TGraph region(static_cast<int>(x.size()),x.data(),y.data());
-  region.SetFillColorAlpha(kAzure + 2,0.25);
-  region.SetLineColorAlpha(kAzure + 2,0.0);
+  const Color_t fillColor = MarkerEnvInt(GMarkerType::kBackground,"Color",
+                                         DefaultMarkerColor(GMarkerType::kBackground));
+  const double fillAlpha = MarkerEnvDouble(GMarkerType::kBackground,"FillAlpha",0.25);
+  region.SetFillColorAlpha(fillColor,fillAlpha);
+  region.SetLineColorAlpha(fillColor,0.0);
   region.Paint("F");
 }
 
@@ -177,14 +233,12 @@ void GMarker::AddTo(TH1 *h, double x, double y,bool ignoreMax,Option_t *opt) {
   SetX(x);
 
   if(!fLineX) fLineX = new TLine;
-  fLineX->SetLineWidth(2);
 
   if(h->GetDimension() == 2) {
     y = fHist->GetYaxis()->GetBinLowEdge(fHist->GetYaxis()->FindBin(y));
     SetY(y);
 
     if(!fLineY) fLineY = new TLine;
-    fLineY->SetLineWidth(2);
     if(fType == GMarkerType::kCut && !fPoint)
       fPoint = new TMarker;
   }
@@ -265,15 +319,19 @@ void GMarker::Paint(Option_t *opt) {
       const size_t index = static_cast<size_t>(std::distance(markers.begin(),found));
       if(index > 0) {
         TLine segment(markers[index-1]->X(),markers[index-1]->Y(),fX,fY);
-        segment.SetLineColor(kOrange + 7);
-        segment.SetLineWidth(2);
+        segment.SetLineColor(MarkerEnvInt(GMarkerType::kCut,"Color",
+                                          DefaultMarkerColor(GMarkerType::kCut)));
+        segment.SetLineWidth(MarkerEnvInt(GMarkerType::kCut,"Width",2));
+        segment.SetLineStyle(MarkerEnvInt(GMarkerType::kCut,"Style",
+                                          DefaultLineStyle(GMarkerType::kCut)));
         segment.Paint();
       }
       if(index == markers.size()-1 && markers.size() > 2) {
         TLine closing(fX,fY,markers.front()->X(),markers.front()->Y());
-        closing.SetLineColor(kOrange + 7);
-        closing.SetLineWidth(2);
-        closing.SetLineStyle(kDashed);
+        closing.SetLineColor(MarkerEnvInt(GMarkerType::kCut,"Color",
+                                          DefaultMarkerColor(GMarkerType::kCut)));
+        closing.SetLineWidth(MarkerEnvInt(GMarkerType::kCut,"Width",2));
+        closing.SetLineStyle(MarkerEnvInt(GMarkerType::kCut,"ClosingStyle",kDashed));
         closing.Paint();
       }
     }
@@ -429,9 +487,9 @@ int GMarker::DistancetoPrimitive(int px, int py) {
   int d1 = 9999;
   int d2 = 9999;
   if(fType == GMarkerType::kCut && fPoint)
-    return fPoint->DistancetoPrimitive(px,py);
+    d1 = fPoint->DistancetoPrimitive(px,py);
   if(fLineX)
-    d1 = fLineX->DistancetoPrimitive(px,py);
+    d1 = std::min(d1,fLineX->DistancetoPrimitive(px,py));
   //if(fLineY)
   //  d2 = fLineY->DistancetoPrimitive(px,py);
   //return (d1 < d2) ? d1 : d2;
@@ -521,11 +579,10 @@ TCutG* GMarker::MakeTCutG(TH1* h,GMarkerType type) {
     y.push_back(y.front());
   }
   TCutG *cut = new TCutG("CUT",static_cast<int>(x.size()),x.data(),y.data());
-  cut->SetLineWidth(2);
-  cut->SetLineColor(2);
+  cut->SetLineWidth(MarkerEnvInt(GMarkerType::kCut,"Width",2));
+  cut->SetLineColor(MarkerEnvInt(GMarkerType::kCut,"Color",
+                                 DefaultMarkerColor(GMarkerType::kCut)));
+  cut->SetLineStyle(MarkerEnvInt(GMarkerType::kCut,"Style",
+                                 DefaultLineStyle(GMarkerType::kCut)));
   return cut;
 }
-
-
-
-

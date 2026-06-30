@@ -11,6 +11,8 @@
 #include<KeySymbols.h>
 #include<TFile.h>
 #include <TCutG.h>
+#include<TPad.h>
+#include<TString.h>
 
 #include<GCanvas.h>
 #include<GGaus.h>
@@ -22,6 +24,57 @@
 
 namespace {
 TVirtualPad* gRequestedCurrentPad = nullptr;
+
+TVirtualPad* ResolveInteractionPad(TVirtualPad* pad) {
+  if(!pad)
+    return nullptr;
+
+  TString name(pad->GetName());
+  if(name.BeginsWith("__gh1d_residual_") && name.EndsWith("_residual")) {
+    TString histPadName = name;
+    histPadName.Resize(histPadName.Length() - TString("_residual").Length());
+    histPadName.Append("_hist");
+
+    auto* tpad = dynamic_cast<TPad*>(pad);
+    TVirtualPad* parent = tpad ? tpad->GetMother() : nullptr;
+    if(!parent || !parent->GetListOfPrimitives())
+      return pad;
+
+    TObject* obj = parent->GetListOfPrimitives()->FindObject(histPadName);
+    if(obj && obj->InheritsFrom(TVirtualPad::Class()))
+      return static_cast<TVirtualPad*>(obj);
+
+    return pad;
+  }
+
+  if(pad->GetListOfPrimitives()) {
+    TIter iter(pad->GetListOfPrimitives());
+    while(TObject* obj = iter.Next()) {
+      if(!obj->InheritsFrom(TVirtualPad::Class()))
+        continue;
+      TString childName(obj->GetName());
+      if(childName.BeginsWith("__gh1d_residual_") && childName.EndsWith("_hist"))
+        return static_cast<TVirtualPad*>(obj);
+    }
+  }
+
+  return pad;
+}
+
+GInteractionInfo BuildInteractionInfo(TVirtualPad* commandPad,TVirtualPad* eventPad)  {
+  GInteractionInfo info;
+  info.pad = commandPad;
+  if(!info.pad) return info;
+  if(!eventPad) eventPad = commandPad;
+  info.selected = eventPad->GetSelected();
+  info.target   = GrabPlottable();
+  info.event    = eventPad->GetEvent();
+  info.px       = eventPad->GetEventX();
+  info.py       = eventPad->GetEventY();
+  info.x        = eventPad->PadtoX(eventPad->AbsPixeltoX(info.px));
+  info.y        = eventPad->PadtoY(eventPad->AbsPixeltoY(info.py));
+  return info;
+}
 }
 
 
@@ -44,6 +97,9 @@ GGaus *GausFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   if(requestedOptions.find("no-print") == std::string::npos)
     printf("Cal chi2 = %.03f\n",chi2);
 
+  if(auto* ghist = dynamic_cast<GH1D*>(hist))
+    ghist->SetResidualFit(mypeak,xlow,xhigh);
+
   return mypeak;
 }
 
@@ -65,6 +121,9 @@ GPeak *PhotoPeakFit(TH1 *hist,double xlow, double xhigh,Option_t *opt) {
   double chi2 = GetChi2(hist,mypeak);
   if(requestedOptions.find("no-print") == std::string::npos)
     printf("Cal chi2 = %.03f\n",chi2);
+
+  if(auto* ghist = dynamic_cast<GH1D*>(hist))
+    ghist->SetResidualFit(mypeak,xlow,xhigh);
 
   return mypeak;
 }
@@ -330,17 +389,7 @@ void   DrawResiduals(TH1* hist, TF1* fit,bool normalized) { }
 
 
 GInteractionInfo BuildInteractionInfo()  {
-  GInteractionInfo info;
-  info.pad = gPad;
-  if(!info.pad) return info;
-  info.selected = info.pad->GetSelected();
-  info.target   = GrabPlottable();
-  info.event    = info.pad->GetEvent();
-  info.px       = info.pad->GetEventX();
-  info.py       = info.pad->GetEventY();
-  info.x        = info.pad->PadtoX(info.pad->AbsPixeltoX(info.px));
-  info.y        = info.pad->PadtoY(info.pad->AbsPixeltoY(info.py));
-  return info;
+  return BuildInteractionInfo(gPad,gPad);
 }
 
 namespace {
@@ -359,11 +408,16 @@ const GInteractionInfo& GetLastInteractionInfo() {
 // need to be void to prevent useless printing.  
 void GRootInteract() {
 
-  GInteractionInfo info = BuildInteractionInfo();
-  gLastInteractionInfo = info;
+  TVirtualPad* eventPad = gPad;
+  if(eventPad && eventPad->GetSelectedPad())
+    eventPad = eventPad->GetSelectedPad();
 
-  if(info.pad && gPad && (gPad != info.pad->GetSelectedPad())) 
-    return;
+  TVirtualPad* commandPad = ResolveInteractionPad(eventPad);
+  if(commandPad && commandPad != gPad)
+    commandPad->cd();
+
+  GInteractionInfo info = BuildInteractionInfo(commandPad,eventPad);
+  gLastInteractionInfo = info;
 
   DispatchInteraction(info);
 
@@ -448,6 +502,8 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
 
   if(info.selected && info.selected->InheritsFrom(GMarker::Class()))
     return false; //should allow GMarker::ExecuteEvent deal with this...
+  if(info.selected && info.selected->InheritsFrom(TCutG::Class()))
+    return false; // let ROOT/TCutG handle dragging/editing existing cuts
 
   switch(info.event) {
     case kButton1Down:       
@@ -460,12 +516,14 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
         // Once a 2D cut has been started, further clicks add vertices rather
         // than replacing the temporary range selection.
         GMarkerType type = GMarkerType::kPrimary;
-        if(currentHist->GetDimension() == 2 &&
-           !GMarker::Get(currentHist,GMarkerType::kCut).empty()) {
+        if(ctrlPressed) {
+          type = currentHist->GetDimension() == 1 ? GMarkerType::kFit : GMarkerType::kCut;
+        } else if(currentHist->GetDimension() == 2 &&
+                  !GMarker::Get(currentHist,GMarkerType::kCut).empty()) {
           type = GMarkerType::kCut;
         }
         marker->SetType(type);
-        marker->AddTo(currentHist,info.x,info.y,ctrlPressed);
+        marker->AddTo(currentHist,info.x,info.y,false);
         //gPad->Modified();
         info.modified = true;
       //} else {
@@ -551,6 +609,12 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
         info.modified = true;
       }
       break;
+    case kKey_f:
+      if(currentHist->GetDimension()==1 && markers.size()>1) {
+        PhotoPeakFit(currentHist,markers.at(0)->X(),markers.at(1)->X());
+        info.modified = true;
+      }
+      break;
     case kKey_g:
       if(currentHist->GetDimension()==1 && markers.size()>1) {
         GausFit(currentHist,markers.at(0)->X(),markers.at(1)->X());
@@ -578,6 +642,10 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
       break;
     case kKey_n:
       if(currentHist) {
+        if(currentHist->InheritsFrom(GH1D::Class())) {
+          GH1D *gcurrentHist = dynamic_cast<GH1D*>(currentHist);
+          gcurrentHist->ClearResidual();
+        }
         TListIter iter(currentHist->GetListOfFunctions());
         std::vector<TF1*> funcs;
         while(TObject *obj=iter.Next()) {
@@ -639,6 +707,15 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
               proj->Draw();
           }
         }
+      }
+      break;
+    case kKey_r:
+      if(currentHist->InheritsFrom(GH1D::Class())) {
+        dynamic_cast<GH1D*>(currentHist)->ToggleResiduals();
+        // ToggleResiduals redraws and can replace/delete the pad that handled
+        // this key event. Do not let the generic post-dispatch update touch
+        // info.pad after the layout changes.
+        info.modified = false;
       }
       break;
     case kKey_w:
@@ -727,6 +804,14 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
       //gPad->Modified();
     default:
       break;
+  }
+
+  if(info.modified && currentHist && currentHist->InheritsFrom(GH1D::Class())) {
+    auto* ghist = dynamic_cast<GH1D*>(currentHist);
+    if(ghist && ghist->ShowResiduals()) {
+      ghist->UpdateResidualDisplay(info.pad);
+      info.modified = false;
+    }
   }
 
   return true;

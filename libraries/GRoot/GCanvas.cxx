@@ -19,7 +19,9 @@
 #include <TH2.h>
 #include <TF1.h>
 #include <TClass.h>
+#include <TCutG.h>
 #include <TFrame.h>
+#include <TPad.h>
 #include <TAxis.h>
 
 #include <TContextMenu.h>
@@ -32,6 +34,23 @@
 int GCanvas::fCanvasNumber = 0;
 
 Event_t GCanvas::fCurrentEvent;
+
+namespace {
+
+void ApplyRequestedCurrentPad(TVirtualPad* requestedPad) {
+  if(!requestedPad)
+    return;
+
+  requestedPad->cd();
+  gROOT->SetSelectedPad(requestedPad);
+
+  TCanvas* canvas = requestedPad->GetCanvas();
+  auto* selectedPad = dynamic_cast<TPad*>(requestedPad);
+  if(canvas && selectedPad)
+    canvas->SetSelectedPad(selectedPad);
+}
+
+}
 
 GCanvas::GCanvas(bool build) : 
   TCanvas(build) { Init(); }
@@ -68,6 +87,8 @@ void GCanvas::Init(const char* name, const char* title) {
   std::string stitle = title;
 
   fLockPads = false;
+  fManagedCursorActive = false;
+  fManagedCursor = kPointer;
 
   if(!sname.length())  this->SetName(temp.c_str());
   if(!stitle.length()) this->SetTitle(temp.c_str());
@@ -136,6 +157,9 @@ void GCanvas::EventProcessed(Event_t *event) {
   char str[2];
   gVirtualX->LookupString(event, str, sizeof(str), keysym);
 
+  //printf("keysym = %i\t gPad = %p GrabHist() = %p GrabHist()->GetName() = %s\n",
+  //  keysym,gPad,GrabHist(),GrabHist() ? GrabHist()->GetName() : "");
+
   /*
   if(keysym==kKey_Space) {
     printf("space bar pressed!\n");
@@ -193,8 +217,8 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
 
   if(!GetSelected()) {
     TCanvas::HandleInput(event,px,py);
-    if(TVirtualPad* requestedPad = TakeRequestedCurrentPad())
-      requestedPad->cd();
+    ApplyRequestedCurrentPad(TakeRequestedCurrentPad());
+    UpdateCursorForSelected(event);
     return;
   }
 
@@ -212,8 +236,12 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
     //return TCanvas::HandleInput(event,px,py);
 
   TH1 *currentHist = GrabHist();
-  if(!currentHist)
-    return; //TCanvas::HandleInput(event,px,py);
+  if(!currentHist) {
+    TCanvas::HandleInput(event,px,py);
+    ApplyRequestedCurrentPad(TakeRequestedCurrentPad());
+    UpdateCursorForSelected(event);
+    return;
+  }
 
   //check the event,
   switch(event) {
@@ -250,8 +278,49 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
   else 
     UpdateAllPads();
 
-  if(TVirtualPad* requestedPad = TakeRequestedCurrentPad())
-    requestedPad->cd();
+  ApplyRequestedCurrentPad(TakeRequestedCurrentPad());
+  UpdateCursorForSelected(event);
+}
+
+ECursor GCanvas::CursorForSelected(TObject *selected) const {
+  if(!selected)
+    return kPointer;
+
+  // Keep all groot-specific cursor policy here, after ROOT has picked the
+  // object under the mouse.  This avoids making individual objects manage the
+  // global canvas cursor, and gives us one expandable place to add future
+  // interactive objects.
+  if(selected->InheritsFrom(GMarker::Class()))
+    return kHand;
+
+  if(selected->InheritsFrom(TCutG::Class()))
+    return kHand;
+
+  return kPointer;
+}
+
+void GCanvas::UpdateCursorForSelected(EEventType event) {
+  // ROOT already sets a number of useful cursors while picking and executing
+  // events.  Only override the cursor for the interactions groot explicitly
+  // owns, and only reset the cursor if the previous cursor was ours.
+  if(event != kMouseMotion && event != kMouseEnter && event != kMouseLeave)
+    return;
+
+  const ECursor cursor = CursorForSelected(GetSelected());
+  if(cursor != kPointer) {
+    if(fManagedCursorActive && fManagedCursor == cursor)
+      return;
+    SetCursor(cursor);
+    fManagedCursor = cursor;
+    fManagedCursorActive = true;
+    return;
+  }
+
+  if(fManagedCursorActive) {
+    SetCursor(kPointer);
+    fManagedCursor = kPointer;
+    fManagedCursorActive = false;
+  }
 }
 
 
@@ -435,5 +504,3 @@ void GCanvas::Divide(int nx,int ny,float xmargin,float ymargin,int color) {
       static_cast<TPad*>(obj)->AddExec("groot_interact","GRootInteract()");
 
 }
-
-
