@@ -55,7 +55,7 @@ target_link_libraries(groot PRIVATE
   GTOOLS
   GROOTLIB
   GUI
-  Gint
+  GCORE
   GObjectManager
 )
 
@@ -78,7 +78,6 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E echo "${CYAN} goot build successfully, ${YELLOW} woo hoo! ${RESET}"
   COMMAND ${CMAKE_COMMAND} -E echo "-----------------------------------"
 )
-
 
 
 

@@ -6,6 +6,7 @@
 #include <TEnv.h>
 
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <vector>
 #include <TH1D.h>
@@ -15,6 +16,7 @@
 
 #include <Gint.h>
 #include <Gtypes.h>
+#include <GHTTPConnection.h>
 #include <argParser.h>
 #include <Histomatic.h>
 
@@ -22,6 +24,33 @@
 #include <GGlobals.h>
 
 Gint *Gint::fGint = 0;
+
+namespace {
+
+std::vector<std::unique_ptr<GHTTPConnection> > live_connections;
+
+bool IsLiveUrl(const std::string& input) {
+  return input.compare(0, 7, "http://") == 0 ||
+         input.compare(0, 5, "ws://") == 0;
+}
+
+void StartLiveConnection(const std::string& url) {
+  std::unique_ptr<GHTTPConnection> connection(new GHTTPConnection);
+  if(connection->Start(url)) {
+    live_connections.push_back(std::move(connection));
+  }
+}
+
+void StopLiveConnections() {
+  for(auto& connection : live_connections) {
+    if(connection) {
+      connection->Stop();
+    }
+  }
+  live_connections.clear();
+}
+
+}
 
 //Gint::Gint(int argc, char **argv) : TRint("gint",&argc,argv,0,0,true,false) {
 Gint::Gint(int argc, char **argv) : TRint("gint",0,0,0,0,true,false), 
@@ -40,9 +69,12 @@ Gint *Gint::Get(int argc,char **argv) {
   return fGint;
 }
 
-Gint::~Gint() { }
+Gint::~Gint() {
+  StopLiveConnections();
+}
 
 void Gint::Terminate(int status) {
+  StopLiveConnections();
   printf("\nbye,bye\n\n");
   SetPrompt("");
   TRint::Terminate(status);
@@ -129,6 +161,11 @@ void Gint::LoadOptions(int argc, char **argv) {
 
   
   for(auto& file : input_files){
+    if(IsLiveUrl(file)) {
+      StartLiveConnection(file);
+      continue;
+    }
+
     switch(DetermineFileType(file)){
       case kFileType::CALIBRATION:
 	LoadCalibrationFile(file);
@@ -440,6 +477,5 @@ long Gint::ProcessLine(const char* line, bool sync, int* error) {
   }
   return retval;
 }
-
 
 
