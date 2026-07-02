@@ -13,6 +13,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <TBufferFile.h>
+#include <TObject.h>
+
+#include <GObjectManager.h>
+
 GHTTPConnection::GHTTPConnection()
   : fSocket(-1), fStopRequested(false), fConnected(false) {
 }
@@ -21,12 +26,17 @@ GHTTPConnection::~GHTTPConnection() {
   Stop();
 }
 
+void GHTTPConnection::SetSnapshotCallback(SnapshotCallback callback) {
+  fSnapshotCallback = callback;
+}
+
 bool GHTTPConnection::Start(const std::string& url) {
   fUrl = url;
   if(!ParseUrl(url, fParsedUrl)) {
     std::cout << "Could not parse live histogram URL: " << url << std::endl;
     return false;
   }
+  fSourceName = MakeSourceName(fParsedUrl);
 
   if(!ConnectSocket()) {
     std::cout << "Could not connect to live histogram server "
@@ -136,6 +146,28 @@ std::string GHTTPConnection::MakeWebSocketKey() {
     byte = static_cast<unsigned char>(random());
   }
   return Base64Encode(bytes.data(), bytes.size());
+}
+
+std::string GHTTPConnection::MakeSourceName(const ParsedUrl& parsed) {
+  std::string name = "live_" + parsed.host + "_" + parsed.port;
+  std::replace_if(name.begin(), name.end(),
+                  [](char c) {
+                    return !(std::isalnum(static_cast<unsigned char>(c)) ||
+                             c == '_' || c == '.');
+                  },
+                  '_');
+  return name;
+}
+
+std::string GHTTPConnection::StripHistogramPrefix(const std::string& path) {
+  const std::string prefix = "/histograms/";
+  if(path.compare(0, prefix.size(), prefix) == 0) {
+    return path.substr(prefix.size());
+  }
+  if(!path.empty() && path[0] == '/') {
+    return path.substr(1);
+  }
+  return path;
 }
 
 bool GHTTPConnection::ConnectSocket() {
@@ -285,6 +317,55 @@ bool GHTTPConnection::ReadFrame(unsigned char& opcode, std::vector<char>& payloa
   return true;
 }
 
+bool GHTTPConnection::ParseSnapshot(const std::vector<char>& frame,
+                                    Snapshot& snapshot) const {
+  const std::string separator = "\n\n";
+  auto sep = std::search(frame.begin(), frame.end(),
+                         separator.begin(), separator.end());
+  if(sep == frame.end()) {
+    return false;
+  }
+
+  std::string header(frame.begin(), sep);
+  std::string path;
+  std::string class_name;
+  std::string bytes;
+
+  std::istringstream stream(header);
+  std::string line;
+  while(std::getline(stream, line)) {
+    if(line.compare(0, 5, "PATH ") == 0) {
+      path = line.substr(5);
+    } else if(line.compare(0, 6, "CLASS ") == 0) {
+      class_name = line.substr(6);
+    } else if(line.compare(0, 6, "BYTES ") == 0) {
+      bytes = line.substr(6);
+    }
+  }
+
+  if(path.empty()) {
+    return false;
+  }
+
+  auto payload_begin = sep + separator.size();
+  snapshot.path = StripHistogramPrefix(path);
+  snapshot.className = class_name;
+  snapshot.payload.assign(payload_begin, frame.end());
+  return !snapshot.payload.empty();
+}
+
+TObject* GHTTPConnection::DeserializeSnapshot(const Snapshot& snapshot) const {
+  if(snapshot.payload.empty()) {
+    return nullptr;
+  }
+
+  TBufferFile buffer(TBuffer::kRead,
+                     static_cast<Int_t>(snapshot.payload.size()),
+                     const_cast<char*>(snapshot.payload.data()),
+                     kFALSE);
+  return static_cast<TObject*>(buffer.ReadObjectAny(TObject::Class()));
+}
+
 void GHTTPConnection::ReceiverLoop() {
   // reads "frames" from the websocket. Currently 
   // there can be three different frames:
@@ -316,42 +397,37 @@ void GHTTPConnection::PrintTextFrame(const std::vector<char>& payload) const {
   std::istringstream stream(text);
   std::string line;
   while(std::getline(stream, line)) {
-    if(!line.empty()) {
+    if(!line.empty() && line.compare(0, 6, "ERROR ") == 0) {
       std::cout << "\tlive text: " << line << std::endl;
     }
   }
 }
 
-void GHTTPConnection::PrintSnapshotSummary(const std::vector<char>& payload) const {
-  const std::string separator = "\n\n";
-  auto sep = std::search(payload.begin(), payload.end(),
-                         separator.begin(), separator.end());
-  if(sep == payload.end()) {
+void GHTTPConnection::PrintSnapshotSummary(const std::vector<char>& payload) {
+  Snapshot snapshot;
+  if(!ParseSnapshot(payload, snapshot)) {
     std::cout << "\tlive binary snapshot: " << payload.size()
               << " bytes, no header found" << std::endl;
     return;
   }
 
-  std::string header(payload.begin(), sep);
-  std::string path;
-  std::string class_name;
-  std::string bytes;
-
-  std::istringstream stream(header);
-  std::string line;
-  while(std::getline(stream, line)) {
-    if(line.compare(0, 5, "PATH ") == 0) {
-      path = line.substr(5);
-    } else if(line.compare(0, 6, "CLASS ") == 0) {
-      class_name = line.substr(6);
-    } else if(line.compare(0, 6, "BYTES ") == 0) {
-      bytes = line.substr(6);
-    }
+  TObject* object = DeserializeSnapshot(snapshot);
+  TObject* managed = nullptr;
+  if(object) {
+    managed = GObjectManager::UpdateObject(fSourceName, snapshot.path, object);
   }
 
-  std::cout << "\tlive snapshot: " << path
-            << " " << class_name
-            << " " << bytes << " bytes" << std::endl;
+  if(object) {
+    if(managed && fSnapshotCallback) {
+      fSnapshotCallback(fSourceName, snapshot.path, managed);
+    }
+    delete object;
+  } else {
+    std::cout << "\tlive snapshot: " << snapshot.path
+              << " headerClass=" << snapshot.className
+              << " payload=" << snapshot.payload.size()
+              << " bytes deserialize failed" << std::endl;
+  }
 }
 
 void GHTTPConnection::CloseSocket() {

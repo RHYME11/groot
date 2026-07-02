@@ -1,6 +1,8 @@
 #ifndef __GCOMMANDS_H__
 #define __GCOMMANDS_H__
 
+#include <string>
+
 class TVirtualPad;
 class TObject;
 class TList;
@@ -17,6 +19,8 @@ struct GInteractionInfo {
   TVirtualPad* pad = nullptr;
   TObject* selected = nullptr;
   TObject* target = nullptr;
+  std::string selectedName;
+  std::string targetName;
 
   int event = 0;
   int px = 0;

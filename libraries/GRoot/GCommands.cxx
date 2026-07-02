@@ -68,6 +68,10 @@ GInteractionInfo BuildInteractionInfo(TVirtualPad* commandPad,TVirtualPad* event
   if(!eventPad) eventPad = commandPad;
   info.selected = eventPad->GetSelected();
   info.target   = GrabPlottable();
+  if(info.selected)
+    info.selectedName = info.selected->GetName();
+  if(info.target)
+    info.targetName = info.target->GetName();
   info.event    = eventPad->GetEvent();
   info.px       = eventPad->GetEventX();
   info.py       = eventPad->GetEventY();
@@ -542,7 +546,17 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
        if(current) {
           GCanvas *c = new GCanvas();  //move to makedefcanvas?
           TH1 *h = current->DrawCopy();
-          h->SetDirectory(0);
+          if(h) {
+            h->SetDirectory(0);
+            // TH1::DrawCopy clones the histogram's list of functions.  In
+            // groot that list can contain interactive objects with their own
+            // ownership rules (markers, fit helpers, residual helpers, ...).
+            // The pop-out canvas is only a clean view of the histogram data,
+            // so do not let the copied histogram own/delete those copied
+            // helpers when the canvas is closed.
+            if(h->GetListOfFunctions())
+              h->GetListOfFunctions()->Clear("nodelete");
+          }
           c->Modified();
           c->Update();
        }

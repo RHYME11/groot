@@ -21,6 +21,7 @@
 #include <TGLabel.h>
 
 //#include <GObjectManager.h>
+#include <GObjectManager.h>
 #include <GCanvas.h>
 #include <GH1D.h>
 #include <GH2D.h>
@@ -112,7 +113,7 @@ void GInfoPanel::Update(const GInteractionInfo &info) {
     SetRow("Mode", "click=marker, Ctrl-click=ignore max");
     return;
   }
-  SetRow("Object", info.target->GetName());
+  SetRow("Object", info.targetName);
   SetRow("Cursor", Form("x = %.3f", info.x));
   SetRow("Counts", Form("%.3f", info.counts));
   SetRow("Marker", "Primary");
@@ -397,32 +398,12 @@ void Histomatic::doDraw(std::vector<TGListTreeItem*> selected, Option_t *opt) co
   for(auto item=selected.begin();item!=selected.end();item++) {
 
     TKey          *key = fGListTree->GetKey(*item);  
-    if(!key) continue;
+    if(!key && !GObjectManager::HasSource(fGListTree->GetFileName(*item))) continue;
     std::string fullPath = fGListTree->GetFullPath(*item);
 
-    if(GetListTree()->fObjReadMap.find(fullPath) == GetListTree()->fObjReadMap.end()) { //obj not in map.
-      TObject *obj = fGListTree->GetObject(*item);
-      if(obj) {
-        if(obj->InheritsFrom(TH2D::Class())) {
-          GetListTree()->fObjReadMap[fullPath] = new GH2D(*static_cast<TH2D*>(obj));
-        } else if(obj->InheritsFrom(TH1D::Class())) {
-          GH1D *gh1d = new GH1D(*static_cast<TH1D*>(obj));
-          gh1d->SetTitle(fullPath.c_str());
-          GetListTree()->fObjReadMap[fullPath] = gh1d;
-          //printf("I AM HERE\n");
-          //GetListTree()->fObjReadMap[fullPath] = new GH1D(*static_cast<TH1D*>(obj));
-        } else if(obj->InheritsFrom(TH1F::Class())) {
-          GH1D *gh1d = new GH1D(*static_cast<TH1F*>(obj));
-          gh1d->SetTitle(fullPath.c_str());
-          //printf("I AM HERE\n");
-          GetListTree()->fObjReadMap[fullPath] = new GH1D(*static_cast<TH1F*>(obj));
-        } else {
-          GetListTree()->fObjReadMap[fullPath] = obj;
-        }
-      }
-    }
+    TObject *obj = fGListTree->GetObject(*item);
+    if(!obj) continue;
 
-    TObject *obj = GetListTree()->fObjReadMap[fullPath];
     if(obj->InheritsFrom(TH2::Class())) {
       hists2D.push_back(static_cast<TH2*>(obj));
       drawables++;

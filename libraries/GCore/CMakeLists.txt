@@ -1,8 +1,9 @@
 
 #this will compile the current library.
 add_library(GCORE SHARED
-  Gint.cxx
   GHTTPConnection.cxx
+  GObjectManager.cxx
+  GOptions.cxx
 )
 
 target_include_directories(GCORE PUBLIC
@@ -10,5 +11,8 @@ target_include_directories(GCORE PUBLIC
   ${ROOT_INCLUDE_DIRS}
 ) 
 
-root_generate_dictionary(G__GCORE Gint.h MODULE GCORE LINKDEF Linkdef.h)
-target_link_libraries(GCORE PUBLIC ${ROOT_LIBRARIES} GUI)
+root_generate_dictionary(G__GCORE
+  GObjectManager.h
+  MODULE GCORE
+  LINKDEF Linkdef.h)
+target_link_libraries(GCORE PUBLIC ${ROOT_LIBRARIES} GROOTLIB)

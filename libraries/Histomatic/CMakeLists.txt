@@ -24,6 +24,6 @@ target_link_libraries(GUI PUBLIC
   ${ROOT_LIBRARIES} 
   ROOT::Gui 
   GROOTLIB
+  GCORE
 )
-
 

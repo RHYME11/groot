@@ -17,7 +17,7 @@
 #include <Gint.h>
 #include <Gtypes.h>
 #include <GHTTPConnection.h>
-#include <argParser.h>
+#include <GOptions.h>
 #include <Histomatic.h>
 
 #include <globals.h>
@@ -29,13 +29,14 @@ namespace {
 
 std::vector<std::unique_ptr<GHTTPConnection> > live_connections;
 
-bool IsLiveUrl(const std::string& input) {
-  return input.compare(0, 7, "http://") == 0 ||
-         input.compare(0, 5, "ws://") == 0;
-}
-
 void StartLiveConnection(const std::string& url) {
   std::unique_ptr<GHTTPConnection> connection(new GHTTPConnection);
+  connection->SetSnapshotCallback(
+    [](const std::string& source, const std::string& path, TObject* object) {
+      if(gHistomatic && gHistomatic->GetListTree()) {
+        gHistomatic->GetListTree()->AddManagedPath(source, path, object);
+      }
+    });
   if(connection->Start(url)) {
     live_connections.push_back(std::move(connection));
   }
@@ -112,75 +113,50 @@ void Gint::LoadStyle() {
 
 void Gint::LoadOptions(int argc, char **argv) {
   //check the grutrc file for set preset optrions....
-  
-
-  argParser parser;
-
-  std::vector<std::string> input_files;
-  bool doHelp,doGui,doVersion;
-
-  parser.default_option(&input_files)
-    .description("Input file(s)");
-  parser.option("h help ?",&doHelp)
-    .description("Show this help Message")
-    .default_value(false);
-  parser.option("g gui",&doGui)
-    .description("Start the GUI")
-    .default_value(false);
-  parser.option("v version",&doVersion)
-    .description("Show version")
-    .default_value(false);
- 
-  // Do the parsing...
-  try{
-    parser.parse(argc, argv);
-  } catch (ParseError& e){
-    std::cerr << "ERROR: " << e.what() << "\n"
-              << parser << std::endl;
+  GOptions options(argc, argv);
+  if(!options.ParseSucceeded()) {
+    std::cerr << options.Error() << std::endl;
     //fShouldExit = true;
   }
-
- 
 
   // Print help if requested.
-  if(doHelp){
+  if(options.ShowHelp()){
     //Version();
-    std::cout << parser << std::endl;
+    std::cout << options.HelpText() << std::endl;
     //fShouldExit = true;
   }
-  if(doVersion) {
+  if(options.ShowVersion()) {
     //Version();
     printf("version not available.\n");
     //fShouldExit = true;
   }
-  if(doGui) {
+  if(options.StartGui()) {
     printf("starting gui...\n"); 
     Histomatic::Get(); 
     //gHistomatic = new Histomatic;
   }
 
   
-  for(auto& file : input_files){
-    if(IsLiveUrl(file)) {
-      StartLiveConnection(file);
-      continue;
-    }
-
-    switch(DetermineFileType(file)){
-      case kFileType::CALIBRATION:
+  for(const auto& input : options.Inputs()){
+    const std::string& file = input.value;
+    switch(input.type){
+      case GOptions::Input::Type::LiveUrl:
+        StartLiveConnection(file);
+        break;
+      case GOptions::Input::Type::Calibration:
 	LoadCalibrationFile(file);
         break;
-      case kFileType::ROOTFILE:
+      case GOptions::Input::Type::RootFile:
         {
           TFile *rfile = OpenRootFile(file);
-          if(rfile && doGui && gHistomatic) 
+          if(rfile && options.StartGui() && gHistomatic) 
             gHistomatic->AddRootFile(rfile);
         }
         break;
-      case kFileType::TXT3:
+      case GOptions::Input::Type::Txt3:
         {
 	  TH1D *hist = OpenTxt3File(file);
-	  if(hist && doGui && gHistomatic) {
+	  if(hist && options.StartGui() && gHistomatic) {
      		std::string name = file.substr(file.find_last_of("/\\") + 1);
      		name += ".root";
 
@@ -192,10 +168,11 @@ void Gint::LoadOptions(int argc, char **argv) {
 	    }
 	}
         break;
-      case kFileType::MACRO:
+      case GOptions::Input::Type::Macro:
         break;
-      case kFileType::CUTS:
+      case GOptions::Input::Type::Cuts:
         break;
+      case GOptions::Input::Type::Unknown:
       default:
         printf("\tDiscarding unknown file: %s\n",file.c_str());
       break;
@@ -207,30 +184,7 @@ void Gint::LoadOptions(int argc, char **argv) {
 }
 
 kFileType Gint::DetermineFileType(const std::string& filename) const {
-  size_t dot = filename.find_last_of('.');
-  if(dot==std::string::npos) return kFileType::UNKNOWN;
-  std::string ext = filename.substr(dot+1);
-
-  if((ext=="gz") || (ext=="bz2") || (ext=="zip")) {
-    std::string remaining = filename.substr(0,dot);
-    ext = remaining.substr(remaining.find_last_of('.')+1);
-  }
- 
-  if(ext == "cal") {
-    return kFileType::CALIBRATION;
-  } else if(ext == "root") {
-    return kFileType::ROOTFILE;
-  } else if((ext=="c") || (ext=="C") 
-            || (ext=="c+") || (ext=="C+") 
-            || (ext=="c++") || (ext=="C++")) {
-    return kFileType::MACRO;
-  } else if(ext == "cuts") {
-    return kFileType::CUTS;
-  } else if(ext == "txt3") {
-    return kFileType::TXT3;
-  } else {
-    return kFileType::UNKNOWN;
-  }
+  return GOptions::DetermineFileType(filename);
 };
 
 /*
@@ -477,5 +431,3 @@ long Gint::ProcessLine(const char* line, bool sync, int* error) {
   }
   return retval;
 }
-
-

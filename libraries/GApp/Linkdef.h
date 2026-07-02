@@ -1,5 +1,4 @@
-
 #ifdef __ROOTCLING__
 #pragma link off all class;
-#pragma link C++ class GObjectManager+;
+#pragma link C++ class Gint+;
 #endif

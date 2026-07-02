@@ -1,6 +1,10 @@
 #ifndef __GLISTTREE_H__
 #define __GLISTTREE_H__
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include "TKey.h"
 
 
@@ -30,6 +34,9 @@ class GListTree : public TGListTree {
 	  void ClearActive();
 
   	void InsertObject(TObject *obj,TGListTreeItem *parent=0);
+  	void AddManagedPath(const std::string& source,
+  	                    const std::string& path,
+  	                    TObject *obj);
   	const TGPicture *GetIcon(TClass *cls);
   
  	 	void Clicked(TGListTreeItem *item, int btn, unsigned int mask, int x, int y) override; 
@@ -62,6 +69,7 @@ class GListTree : public TGListTree {
     int fLastX; 
 
     std::vector<TGListTreeItem*> fSelected;
+    std::map<std::string, TGListTreeItem*> fManagedItems;
   public:  
 		std::map<std::string, TObject*> fObjReadMap;
 	private:

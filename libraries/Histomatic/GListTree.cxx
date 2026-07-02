@@ -133,6 +133,61 @@ void GListTree::InsertObject(TObject *obj,TGListTreeItem *parent) {
   }
 }
 
+void GListTree::AddManagedPath(const std::string& source,
+                               const std::string& path,
+                               TObject *obj) {
+  if(source.empty() || path.empty()) {
+    return;
+  }
+
+  TGListTreeItem *parent = nullptr;
+  auto source_item = fManagedItems.find(source);
+  if(source_item == fManagedItems.end()) {
+    const TGPicture *icon = GetIcon(TFile::Class());
+    parent = icon ? AddItem(nullptr, source.c_str(), icon, icon)
+                  : AddItem(nullptr, source.c_str());
+    fManagedItems[source] = parent;
+  } else {
+    parent = source_item->second;
+  }
+
+  std::vector<std::string> parts = tokenizeString(path, '/');
+  std::string current_path;
+  for(size_t i = 0; i < parts.size(); ++i) {
+    if(parts[i].empty()) {
+      continue;
+    }
+    if(!current_path.empty()) {
+      current_path += "/";
+    }
+    current_path += parts[i];
+
+    const std::string key = source + ":" + current_path;
+    const bool is_leaf = (i + 1 == parts.size());
+    auto found = fManagedItems.find(key);
+    if(found != fManagedItems.end()) {
+      if(is_leaf) {
+        fObjReadMap[key] = obj;
+      }
+      parent = found->second;
+      continue;
+    }
+
+    TClass *cls = (is_leaf && obj) ? obj->IsA() : TDirectory::Class();
+    const TGPicture *icon = GetIcon(cls);
+    TGListTreeItem *item = icon ? AddItem(parent, parts[i].c_str(), icon, icon)
+                                : AddItem(parent, parts[i].c_str());
+    if(is_leaf) {
+      item->SetDNDSource(kTRUE);
+      fObjReadMap[key] = obj;
+    }
+    fManagedItems[key] = item;
+    parent = item;
+  }
+
+  Layout();
+}
+
 const TGPicture *GListTree::GetIcon(TClass *cls) {
   //printf("GetIcon:\t%s\n",cls->GetName());
 
@@ -237,32 +292,12 @@ void GListTree::doDraw(std::vector<TGListTreeItem*> selected,Option_t *opt) {
   for(auto item=selected.begin();item!=selected.end();item++) {
     
     TKey          *key = GetKey(*item);  
-    if(!key) continue;
+    if(!key && !GObjectManager::HasSource(GetFileName(*item))) continue;
     std::string fullPath = GetFullPath(*item);
     
-    if(fObjReadMap.find(fullPath) == fObjReadMap.end()) { //obj not in map.
-      TObject *obj = GetObject(*item);
-      if(obj) {
-        if(obj->InheritsFrom(TH2D::Class())) {
-          fObjReadMap[fullPath] = new GH2D(*static_cast<TH2D*>(obj));
-        } else if(obj->InheritsFrom(TH1D::Class())) {
-          GH1D *gh1d = new GH1D(*static_cast<TH1D*>(obj));
-          gh1d->SetTitle(fullPath.c_str());
-          fObjReadMap[fullPath] = gh1d;
-          //printf("I AM HERE\n");
-          //GetListTree()->fObjReadMap[fullPath] = new GH1D(*static_cast<TH1D*>(obj));
-        } else if(obj->InheritsFrom(TH1F::Class())) {
-          GH1D *gh1d = new GH1D(*static_cast<TH1F*>(obj));
-          gh1d->SetTitle(fullPath.c_str());
-          //printf("I AM HERE\n");
-          fObjReadMap[fullPath] = new GH1D(*static_cast<TH1F*>(obj));
-        } else {
-          fObjReadMap[fullPath] = obj;
-        }
-      }
-    }
-    
-    TObject *obj = fObjReadMap[fullPath];
+    TObject *obj = GetObject(*item);
+    if(!obj) continue;
+
     if(obj->InheritsFrom(TH2::Class())) {
       hists2D.push_back(static_cast<TH2*>(obj));
       drawables++;
@@ -350,21 +385,27 @@ std::string GListTree::GetFullPath(TGListTreeItem *item) const {
 TObject *GListTree::GetObject(TGListTreeItem *item) {
   TObject *obj=0;
   std::string fullPath = GetFullPath(item);
-  printf("fullPath: %s\n",fullPath.c_str());
   if(fObjReadMap.find(fullPath) == fObjReadMap.end()) { //obj not in map.
 
     std::string   path = GetPath(item);
     std::string   file = GetFileName(item);
 
-    TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject(file.c_str());
-    //printf("file: %s\n",file.c_str());
-    //printf("path: %s\n",path.c_str());
-    if(f) {
-      obj = f->Get(path.c_str());
-    } else { //failed to find file, lets try to just find the object.
-      obj = gROOT->FindObjectAny(path.c_str());
+    obj = GObjectManager::GetObject(file, path);
+    if(!obj) {
+      TObject *raw = 0;
+      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject(file.c_str());
+      //printf("file: %s\n",file.c_str());
+      //printf("path: %s\n",path.c_str());
+      if(f) {
+        raw = f->Get(path.c_str());
+      } else { //failed to find file, lets try to just find the object.
+        raw = gROOT->FindObjectAny(path.c_str());
+      }
+      obj = GObjectManager::AddObject(file, path, raw);
     }
-    fObjReadMap[fullPath] = obj;
+    if(obj) {
+      fObjReadMap[fullPath] = obj;
+    }
   } else {
     obj = fObjReadMap[fullPath];
   }

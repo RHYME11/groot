@@ -56,7 +56,7 @@ target_link_libraries(groot PRIVATE
   GROOTLIB
   GUI
   GCORE
-  GObjectManager
+  GAPP
 )
 
 string(ASCII 27 Esc)
@@ -78,8 +78,6 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E echo "${CYAN} goot build successfully, ${YELLOW} woo hoo! ${RESET}"
   COMMAND ${CMAKE_COMMAND} -E echo "-----------------------------------"
 )
-
-
 
 
 
