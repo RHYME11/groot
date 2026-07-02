@@ -538,6 +538,14 @@ bool GRootInteractHistMouseButton(TH1* currentHist,GInteractionInfo &info) {
       break;
     case kButton1Shift:
       //printf("shiftbutton1\n");
+       TH1 *current = GrabHist();
+       if(current) {
+          GCanvas *c = new GCanvas();  //move to makedefcanvas?
+          TH1 *h = current->DrawCopy();
+          h->SetDirectory(0);
+          c->Modified();
+          c->Update();
+       }
       break;
   }
 
