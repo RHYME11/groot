@@ -1,7 +1,8 @@
 
 build/
-
+wiki/
 bin/
+.agents/
 
 *.o
 *.so
