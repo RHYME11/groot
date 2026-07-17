@@ -37,3 +37,7 @@ terminating Groot.
 
 External plugins can compile against the installed `GrootPlugin` CMake package
 and the public headers under `include/Plugin`.
+
+Running `make` builds Groot without regression-test executables and prepares a
+local plugin SDK under `build/plugin-sdk`. Run `make test` to explicitly build
+and execute the Plugin Manager regression tests.

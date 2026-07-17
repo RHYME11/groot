@@ -10,6 +10,7 @@ project(groot
         LANGUAGES CXX)
 
 include(GNUInstallDirs)
+option(BUILD_TESTING "Build Groot regression tests" OFF)
 include(CTest)
 include(CMakePackageConfigHelpers)
 
@@ -110,5 +111,4 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E echo "${CYAN} goot build successfully, ${YELLOW} woo hoo! ${RESET}"
   COMMAND ${CMAKE_COMMAND} -E echo "-----------------------------------"
 )
-
 

@@ -1,5 +1,7 @@
 
 
+.PHONY: all unix test clean xcode
+
 all: unix
 
 
@@ -17,10 +19,17 @@ xcode:
 unix:  CMakeLists.txt
 	#@echo "making... ${JOBS} $(MAKEFLAGS) "
 	@if [ ! -d "./build" ]; then mkdir build; fi
-	@cmake -S ./ -B ./build || cmake3 -S ./ -B ./build
+	@cmake -S ./ -B ./build -DBUILD_TESTING=OFF || cmake3 -S ./ -B ./build -DBUILD_TESTING=OFF
 	@make -j4 -C ./build
 	@if [ ! -d "./bin" ]; then mkdir bin; fi
-	@cp -p ./build/bin/*  ./bin
+	@cp -p ./build/bin/groot ./bin/groot
+	@cmake --install ./build --prefix ./build/plugin-sdk
+
+
+test: CMakeLists.txt
+	@cmake -S ./ -B ./build -DBUILD_TESTING=ON || cmake3 -S ./ -B ./build -DBUILD_TESTING=ON
+	@make -j4 -C ./build
+	@ctest --test-dir ./build --output-on-failure
 
 
 clean: 
@@ -29,5 +38,3 @@ clean:
 	@if [ -d "./build_xcode" ]; then rm -rf build_xcode; fi
 	@if [ -d "./bin" ]; then rm -rf bin; fi
 	
-
-
