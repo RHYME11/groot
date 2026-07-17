@@ -44,6 +44,6 @@ target_link_libraries(GROOTLIB PUBLIC
   ROOT::MathMore 
   ROOT::Gui 
   ROOT::Spectrum
+  GPLUGIN
   GTOOLS
 )
-

@@ -8,11 +8,14 @@
 #include <sstream>
 
 #include <Plugin/GPlugin.h>
+#include <Plugin/GPluginEvent.h>
+#include <Plugin/GPluginSession.h>
 #include <Plugin/GPluginVersion.h>
 
 #include "GPluginLoader.h"
 #include "GPluginManifest.h"
 #include "GPluginRegistry.h"
+#include "GPluginSessionRegistry.h"
 
 namespace {
 
@@ -47,7 +50,9 @@ GPluginManager& GPluginManager::Get() {
 // Inputs: None.
 // Outputs: Uninitialized manager.
 GPluginManager::GPluginManager()
-  : fRegistry(new GPluginRegistry), fInitialized(false) {
+  : fRegistry(new GPluginRegistry),
+    fSessions(new GPluginSessionRegistry),
+    fInitialized(false) {
 }
 
 // ============== GPluginManager::~GPluginManager ==============
@@ -55,6 +60,11 @@ GPluginManager::GPluginManager()
 // Inputs: None.
 // Outputs: Released manager resources; libraries remain process-loaded.
 GPluginManager::~GPluginManager() {
+  for(const auto& record : fSessions->TakeAll()) {
+    if(record.session)
+      record.session->Close();
+  }
+  delete fSessions;
   delete fRegistry;
 }
 
@@ -166,6 +176,79 @@ void GPluginManager::SetStatusMessage(const char* message) {
     std::printf("groot plugin: %s\n", text.c_str());
   if(fStatusCallback)
     fStatusCallback(text);
+}
+
+// ============== GPluginManager::ActivateSession ==============
+// Purpose: Give one plugin exclusive interaction ownership of a pad.
+// Inputs: Plugin session and validated context.
+// Outputs: True when the pad was inactive and registration succeeded.
+bool GPluginManager::ActivateSession(GPluginSession* session,
+                                     const GPluginContext& context) {
+  if(!session || !context.canvas || !context.pad) {
+    ReportError("cannot activate a plugin session without canvas and pad");
+    return false;
+  }
+  GPluginSessionRecord record;
+  record.canvas = context.canvas;
+  record.pad = context.pad;
+  record.session = session;
+  if(!fSessions->Add(record)) {
+    ReportError("the selected pad already has an active plugin session");
+    return false;
+  }
+  SetStatusMessage("Plugin session activated");
+  return true;
+}
+
+// ============== GPluginManager::DeactivateSession ==============
+// Purpose: Release one plugin session's exclusive pad ownership.
+// Inputs: Active session identity.
+// Outputs: Updated session registry.
+void GPluginManager::DeactivateSession(GPluginSession* session) {
+  fSessions->Remove(session);
+  SetStatusMessage("Plugin session deactivated");
+}
+
+// ============== GPluginManager::HasActiveSession ==============
+// Purpose: Test whether a pad is owned by a plugin session.
+// Inputs: Pad identity.
+// Outputs: True when Groot interaction must be bypassed.
+bool GPluginManager::HasActiveSession(TVirtualPad* pad) const {
+  return fSessions->Contains(pad);
+}
+
+// ============== GPluginManager::DispatchEvent ==============
+// Purpose: Deliver an input event to an exclusive pad session.
+// Inputs: Normalized plugin event.
+// Outputs: True whenever the pad is session-owned.
+bool GPluginManager::DispatchEvent(const GPluginEvent& event) {
+  auto* record = fSessions->Find(event.context.pad);
+  if(!record || !record->session)
+    return false;
+  record->session->HandleEvent(event);
+  return true;
+}
+
+// ============== GPluginManager::CloseSessionsForPad ==============
+// Purpose: Close and detach the session for one pad.
+// Inputs: Pad being destroyed or reset.
+// Outputs: Closed session callbacks.
+void GPluginManager::CloseSessionsForPad(TVirtualPad* pad) {
+  for(const auto& record : fSessions->TakePad(pad)) {
+    if(record.session)
+      record.session->Close();
+  }
+}
+
+// ============== GPluginManager::CloseSessionsForCanvas ==============
+// Purpose: Close and detach every session owned by one canvas.
+// Inputs: Canvas being closed.
+// Outputs: Closed session callbacks.
+void GPluginManager::CloseSessionsForCanvas(TCanvas* canvas) {
+  for(const auto& record : fSessions->TakeCanvas(canvas)) {
+    if(record.session)
+      record.session->Close();
+  }
 }
 
 // ============== GPluginManager::SearchPaths ==============

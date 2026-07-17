@@ -1,5 +1,6 @@
 
 #include <GCommands.h>
+#include <Plugin/GPluginManager.h>
 
 #include<TROOT.h>
 #include<TVirtualPad.h>
@@ -435,6 +436,8 @@ void GRootInteract() {
 }
 
 bool DispatchInteraction(GInteractionInfo &info) {
+  if(info.pad && GPluginManager::Get().HasActiveSession(info.pad))
+    return true;
   bool temp = false;
   if(auto* h = dynamic_cast<TH1*>(info.target))
     temp = GRootInteractHist(h,info);

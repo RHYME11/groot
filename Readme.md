@@ -23,7 +23,7 @@ A minimal manifest is:
   Plugin.Id: example
   Plugin.Name: Example Plugin
   Plugin.Version: 1.0.0
-  Plugin.ApiVersion: 1
+  Plugin.ApiVersion: 2
   Plugin.Library: libExamplePlugin.so
   Plugin.Action.Count: 1
   Plugin.Action.0.Id: example.run
@@ -34,6 +34,11 @@ The GUI displays actions from valid manifests. The corresponding library is
 loaded only when an action is first selected. Missing libraries, entry symbols,
 duplicate identifiers, and incompatible API versions are reported without
 terminating Groot.
+
+Plugin API v2 supports one exclusive session per pad. Active sessions receive
+normalized mouse/key events before Groot interaction handlers; events consumed
+by the session do not fall through to Groot hotkeys. Sessions are closed when
+their owner canvas closes.
 
 External Groot connectors compile against the public headers under
 `include/Plugin` and the `GPLUGIN` library in Groot's normal build tree.

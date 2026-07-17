@@ -10,6 +10,11 @@
 #include <Plugin/GPluginHost.h>
 
 class GPluginRegistry;
+class GPluginSession;
+class GPluginSessionRegistry;
+struct GPluginEvent;
+class TCanvas;
+class TVirtualPad;
 
 class GPluginManager : public GPluginHost {
   public:
@@ -26,6 +31,14 @@ class GPluginManager : public GPluginHost {
     void SetContextProvider(std::function<GPluginContext()> provider);
     void SetStatusCallback(std::function<void(const std::string&)> callback);
     void SetStatusMessage(const char* message) override;
+    bool ActivateSession(GPluginSession* session,
+                         const GPluginContext& context) override;
+    void DeactivateSession(GPluginSession* session) override;
+
+    bool HasActiveSession(TVirtualPad* pad) const;
+    bool DispatchEvent(const GPluginEvent& event);
+    void CloseSessionsForPad(TVirtualPad* pad);
+    void CloseSessionsForCanvas(TCanvas* canvas);
 
   private:
     GPluginManager();
@@ -37,6 +50,7 @@ class GPluginManager : public GPluginHost {
     void ReportError(const std::string& message);
 
     GPluginRegistry* fRegistry;
+    GPluginSessionRegistry* fSessions;
     bool fInitialized;
     std::function<void()> fActionChangedCallback;
     std::function<GPluginContext()> fContextProvider;

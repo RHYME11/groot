@@ -9,6 +9,7 @@ struct GPluginContext {
   TCanvas* canvas = nullptr;
   TVirtualPad* pad = nullptr;
   TObject* selected = nullptr;
+  TObject* target = nullptr;
 
   bool IsValid() const {
     return canvas && pad;

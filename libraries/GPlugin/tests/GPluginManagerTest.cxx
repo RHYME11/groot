@@ -5,10 +5,26 @@
 #include <string>
 
 #include <Plugin/GPluginManager.h>
+#include <Plugin/GPluginEvent.h>
+#include <Plugin/GPluginSession.h>
+#include <Plugin/GPluginVersion.h>
 
 namespace {
 
 int failures = 0;
+
+class MockSession : public GPluginSession {
+  public:
+    bool HandleEvent(const GPluginEvent&) override {
+      ++events;
+      return true;
+    }
+    void Close() override {
+      closed = true;
+    }
+    int events = 0;
+    bool closed = false;
+};
 
 // ============== Check ==============
 // Purpose: Record one integration-test expectation.
@@ -29,7 +45,7 @@ void WriteManifest(const std::filesystem::path& path,
                    const std::string& id,
                    const std::string& library,
                    const std::string& action,
-                   int apiVersion = 1) {
+                   int apiVersion = static_cast<int>(kGPluginApiVersion)) {
   std::ofstream output(path);
   output << "Plugin.Id: " << id << '\n'
          << "Plugin.Name: " << id << '\n'
@@ -72,6 +88,25 @@ int main(int argc, char** argv) {
   manager.Initialize();
   Check(manager.Actions().empty(), "empty search path should have no actions");
 
+  MockSession session;
+  GPluginContext sessionContext;
+  sessionContext.canvas = reinterpret_cast<TCanvas*>(0x1000);
+  sessionContext.pad = reinterpret_cast<TVirtualPad*>(0x2000);
+  Check(manager.ActivateSession(&session, sessionContext),
+        "first pad session should activate");
+  Check(manager.HasActiveSession(sessionContext.pad),
+        "active pad should be registered");
+  MockSession duplicateSession;
+  Check(!manager.ActivateSession(&duplicateSession, sessionContext),
+        "a pad must reject a second session");
+  GPluginEvent sessionEvent;
+  sessionEvent.context = sessionContext;
+  Check(manager.DispatchEvent(sessionEvent) && session.events == 1,
+        "active session should consume its event");
+  manager.CloseSessionsForPad(sessionContext.pad);
+  Check(session.closed && !manager.HasActiveSession(sessionContext.pad),
+        "closing a pad should close and unregister its session");
+
   const auto marker = runtime / "mock-created.txt";
   setenv("GROOT_MOCK_LOAD_MARKER", marker.c_str(), 1);
   WriteManifest(runtime / "10-valid.plugin", "mock", validLibrary.string(), "mock.ping");
@@ -88,7 +123,8 @@ int main(int argc, char** argv) {
   WriteManifest(runtime / "40-missing-library.plugin", "missing-library",
                 (runtime / "does-not-exist.so").string(), "missing.library");
   WriteManifest(runtime / "50-wrong-api.plugin", "wrong-api",
-                wrongApiLibrary.string(), "wrong.api", 1);
+                wrongApiLibrary.string(), "wrong.api",
+                static_cast<int>(kGPluginApiVersion));
   WriteManifest(runtime / "60-missing-symbols.plugin", "missing-symbols",
                 missingSymbolsLibrary.string(), "missing.symbols");
   WriteManifest(runtime / "65-manifest-api.plugin", "manifest-api",

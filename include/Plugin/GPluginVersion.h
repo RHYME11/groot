@@ -3,6 +3,6 @@
 
 #include <cstdint>
 
-constexpr std::uint32_t kGPluginApiVersion = 1;
+constexpr std::uint32_t kGPluginApiVersion = 2;
 
 #endif

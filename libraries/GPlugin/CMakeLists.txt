@@ -3,6 +3,7 @@ add_library(GPLUGIN SHARED
   GPluginManager.cxx
   GPluginManifest.cxx
   GPluginRegistry.cxx
+  GPluginSessionRegistry.cxx
 )
 
 target_include_directories(GPLUGIN PUBLIC

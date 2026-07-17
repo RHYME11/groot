@@ -12,6 +12,8 @@
 #include <GROI.h>
 #include <GH1D.h>
 #include <GH2D.h>
+#include <Plugin/GPluginEvent.h>
+#include <Plugin/GPluginManager.h>
 
 
 #include <KeySymbols.h>
@@ -50,6 +52,25 @@ void ApplyRequestedCurrentPad(TVirtualPad* requestedPad) {
     canvas->SetSelectedPad(selectedPad);
 }
 
+GPluginEvent BuildPluginEvent(GCanvas* canvas, TVirtualPad* pad,
+                              int type, int code, int px, int py, int state) {
+  GPluginEvent event;
+  event.context.canvas = canvas;
+  event.context.pad = pad;
+  event.context.selected = pad ? pad->GetSelected() : nullptr;
+  event.context.target = event.context.selected;
+  event.type = type;
+  event.code = code;
+  event.state = state;
+  event.px = px;
+  event.py = py;
+  if(pad) {
+    event.x = pad->PadtoX(pad->AbsPixeltoX(px));
+    event.y = pad->PadtoY(pad->AbsPixeltoY(py));
+  }
+  return event;
+}
+
 }
 
 GCanvas::GCanvas(bool build) : 
@@ -67,7 +88,9 @@ GCanvas::GCanvas(const char* name, const char* title,int form) :
 GCanvas::GCanvas(const char* name, int ww, int wh, int winid) :
   TCanvas(name,ww,wh,winid) { Init(name); }
 
-GCanvas::~GCanvas() { }
+GCanvas::~GCanvas() {
+  GPluginManager::Get().CloseSessionsForCanvas(this);
+}
   
 
 
@@ -75,7 +98,8 @@ void GCanvas::Close(Option_t *opt) {
   //gClient->Disconnect("ProcessedEvent(Event_t *,Window_t)","GCanvas",this,"EventProcessed(Event_t*)");
   //GetCanvasImp()->Disconnect(this,"ProcessedEvent(Event_t *,Window_t)",
   //                           this,"EventProcessed(Event_t*)");
-  if(GetCanvasImp()->IsA() == TRootCanvas::Class())
+  GPluginManager::Get().CloseSessionsForCanvas(this);
+  if(GetCanvasImp() && GetCanvasImp()->IsA() == TRootCanvas::Class())
     static_cast<TRootCanvas*>(GetCanvasImp())->Disconnect(this,"ProcessedEvent(Event_t *,Window_t)",
                                                           this,"EventProcessed(Event_t*)");
   TCanvas::Close(opt);
@@ -186,6 +210,16 @@ void GCanvas::EventProcessed(Event_t *event) {
     case kKey_Up:
     case kKey_Right:
     case kKey_Down:
+      {
+        TVirtualPad* pad = GetSelectedPad();
+        if(!pad)
+          pad = this;
+        GPluginEvent pluginEvent = BuildPluginEvent(
+          this, pad, kArrowKeyPress, static_cast<int>(keysym),
+          event->fX, event->fY, event->fState);
+        if(GPluginManager::Get().DispatchEvent(pluginEvent))
+          break;
+      }
       //printf("arrow key pressed.\n");
       //printf("keysym = 0x%08x\n",keysym);
       //TH1 *currentHist = GrabHist();
@@ -203,6 +237,18 @@ void GCanvas::EventProcessed(Event_t *event) {
 
 void GCanvas::HandleInput(EEventType event, int px, int py) {
   bool handled = false;
+
+  TVirtualPad* pluginPad = GetSelectedPad();
+  if(!pluginPad)
+    pluginPad = this;
+  GPluginEvent pluginEvent = BuildPluginEvent(
+    this, pluginPad, static_cast<int>(event),
+    event == kKeyPress ? px : 0, px, py, fCurrentEvent.fState);
+  if(GPluginManager::Get().DispatchEvent(pluginEvent)) {
+    pluginPad->Modified();
+    pluginPad->Update();
+    return;
+  }
 
   if(event==kKeyPress && px==kKey_Space) {
     if(GetSelectedPad()) {
