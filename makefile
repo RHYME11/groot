@@ -23,7 +23,6 @@ unix:  CMakeLists.txt
 	@make -j4 -C ./build
 	@if [ ! -d "./bin" ]; then mkdir bin; fi
 	@cp -p ./build/bin/groot ./bin/groot
-	@cmake --install ./build --prefix ./build/plugin-sdk
 
 
 test: CMakeLists.txt

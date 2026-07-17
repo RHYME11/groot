@@ -35,9 +35,9 @@ loaded only when an action is first selected. Missing libraries, entry symbols,
 duplicate identifiers, and incompatible API versions are reported without
 terminating Groot.
 
-External plugins can compile against the installed `GrootPlugin` CMake package
-and the public headers under `include/Plugin`.
+External Groot connectors compile against the public headers under
+`include/Plugin` and the `GPLUGIN` library in Groot's normal build tree.
 
-Running `make` builds Groot without regression-test executables and prepares a
-local plugin SDK under `build/plugin-sdk`. Run `make test` to explicitly build
-and execute the Plugin Manager regression tests.
+Running `make` builds Groot without regression-test executables. Run
+`make test` to explicitly build and execute the Plugin Manager regression
+tests.

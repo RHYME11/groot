@@ -6,24 +6,11 @@ add_library(GPLUGIN SHARED
 )
 
 target_include_directories(GPLUGIN PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+  ${CMAKE_SOURCE_DIR}/include
 )
 
 target_link_libraries(GPLUGIN PUBLIC ROOT::Core)
 target_compile_features(GPLUGIN PUBLIC cxx_std_17)
-
-set_target_properties(GPLUGIN PROPERTIES
-  EXPORT_NAME Plugin
-)
-
-install(
-  TARGETS GPLUGIN
-  EXPORT GrootPluginTargets
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)
