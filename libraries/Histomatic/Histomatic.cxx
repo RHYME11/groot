@@ -30,6 +30,8 @@
 #include <GEventTimer.h>
 
 #include <GCommands.h>
+#include <Plugin/GPluginContext.h>
+#include <Plugin/GPluginManager.h>
 
 #include <GListTree.h>
 
@@ -133,6 +135,20 @@ Histomatic::Histomatic() : TGMainFrame(gClient->GetRoot(),350,780), fVf(0) {
   int width  = 350;
   int height = 780;
 
+  GPluginManager::Get().SetActionChangedCallback([this]() {
+    RefreshPluginActions();
+  });
+  GPluginManager::Get().SetContextProvider([]() {
+    GPluginContext context;
+    context.pad = gPad;
+    context.canvas = context.pad ? context.pad->GetCanvas() : nullptr;
+    context.selected = context.canvas ? context.canvas->GetSelected() : nullptr;
+    return context;
+  });
+  GPluginManager::Get().SetStatusCallback([this](const std::string& message) {
+    SetStatusText(message, 0);
+  });
+
   CreateWindow();
   this->SetWindowName("hist-o-matic");
 
@@ -163,6 +179,10 @@ void Histomatic::Show(int width, int height) {
 }
 
 Histomatic::~Histomatic() {
+  GPluginManager::Get().SetActionChangedCallback({});
+  GPluginManager::Get().SetContextProvider({});
+  GPluginManager::Get().SetStatusCallback({});
+
   if(gHistomatic == this)
     gHistomatic = 0;
 
@@ -182,13 +202,9 @@ Histomatic::~Histomatic() {
   //TGPopupMenu       *fMenuFile;
   //TGPopupMenu       *fMenuHelp;     
 
-  delete fButton1; 
-  delete fButton2; 
-  delete fButton3; 
+  for(auto* button : fPluginButtons)
+    delete button;
   delete fButton4; 
-  delete fButton5; 
-  delete fButton6; 
-  delete fButton7; 
   delete fButton8; 
 
   delete fDrawComboBox;
@@ -240,37 +256,19 @@ void Histomatic::CreateWindow() {
   fButtonContainer = new TGVerticalFrame(fVf,200,200);
 
   fButtonRow1 = new TGHorizontalFrame(fButtonContainer,10,10);
-  fButton1 = new TGTextButton(fButtonRow1,"button1");
-  fButton1->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton2 = new TGTextButton(fButtonRow1,"button2");
-  fButton2->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton3 = new TGTextButton(fButtonRow1,"button3");
-  fButton3->Connect("Clicked()","Histomatic",this,"buttonAction()");
   fButton4 = new TGTextButton(fButtonRow1,"CloseAll");
   fButton4->Connect("Clicked()","Histomatic",this,"closeAllCanvases()");
-  fButtonRow1->AddFrame(fButton1,fLH1);
-  fButtonRow1->AddFrame(fButton2,fLH1);
-  fButtonRow1->AddFrame(fButton3,fLH1);
   fButtonRow1->AddFrame(fButton4,fLH1);
 
   fButtonRow2 = new TGHorizontalFrame(fButtonContainer,10,10);
-  fButton5 = new TGTextButton(fButtonRow2,"button5");
-  fButton5->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton6 = new TGTextButton(fButtonRow2,"button6");
-  fButton6->Connect("Clicked()","Histomatic",this,"buttonAction()");
-  fButton7 = new TGTextButton(fButtonRow2,"button7");
-  fButton7->Connect("Clicked()","Histomatic",this,"buttonAction()");
   fButton8 = new TGTextButton(fButtonRow2,"do Draw");
   fButton8->Connect("Clicked()","Histomatic",this,"doDraw()");
 
-
-  fButtonRow2->AddFrame(fButton5,fLH1);
-  fButtonRow2->AddFrame(fButton6,fLH1);
-  fButtonRow2->AddFrame(fButton7,fLH1);
   fButtonRow2->AddFrame(fButton8,fLH1);
 
   fButtonContainer->AddFrame(fButtonRow1,fLH1);  
   fButtonContainer->AddFrame(fButtonRow2,fLH1);  
+  RefreshPluginActions();
 
   fDrawOptionContainer = new TGHorizontalFrame(fVf,100,40);
 
@@ -374,10 +372,57 @@ void Histomatic::CloseWindow() {
 }
 
 
-void Histomatic::buttonAction() {
+// ============== Histomatic::RefreshPluginActions ==============
+// Purpose: Rebuild plugin action buttons from the manager registry.
+// Inputs: Current plugin action registry.
+// Outputs: Updated dynamic button rows.
+void Histomatic::RefreshPluginActions() {
+  if(!fButtonRow1 || !fButtonRow2)
+    return;
 
-  printf("button ACTION!!! \n");
+  for(auto* button : fPluginButtons) {
+    if(button->GetParent() == fButtonRow1)
+      fButtonRow1->RemoveFrame(button);
+    else
+      fButtonRow2->RemoveFrame(button);
+    delete button;
+  }
+  fPluginButtons.clear();
+  fPluginButtonActions.clear();
 
+  constexpr int firstPluginButtonId = 1000;
+  int index = 0;
+  for(const auto& action : GPluginManager::Get().Actions()) {
+    TGHorizontalFrame* row = index % 2 == 0 ? fButtonRow1 : fButtonRow2;
+    const int buttonId = firstPluginButtonId + index;
+    auto* button = new TGTextButton(row, action.label.c_str(), buttonId);
+    button->Associate(this);
+    if(!action.tooltip.empty())
+      button->SetToolTipText(action.tooltip.c_str());
+    row->AddFrame(button, fLH1);
+    fPluginButtons.push_back(button);
+    fPluginButtonActions.emplace(buttonId, action.id);
+    ++index;
+  }
+
+  fButtonRow1->MapSubwindows();
+  fButtonRow2->MapSubwindows();
+  Layout();
+}
+
+// ============== Histomatic::ProcessMessage ==============
+// Purpose: Dispatch dynamic plugin button messages to the plugin manager.
+// Inputs: ROOT GUI message and button identifier.
+// Outputs: True after the message is handled or delegated.
+Bool_t Histomatic::ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2) {
+  if(GET_MSG(msg) == kC_COMMAND && GET_SUBMSG(msg) == kCM_BUTTON) {
+    const auto action = fPluginButtonActions.find(static_cast<int>(parm1));
+    if(action != fPluginButtonActions.end()) {
+      GPluginManager::Get().ExecuteAction(action->second);
+      return kTRUE;
+    }
+  }
+  return TGMainFrame::ProcessMessage(msg, parm1, parm2);
 }
 
 void Histomatic::doDraw() {

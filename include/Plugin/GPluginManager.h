@@ -1,0 +1,46 @@
+#ifndef __GPLUGINMANAGER_H__
+#define __GPLUGINMANAGER_H__
+
+#include <functional>
+#include <string>
+#include <vector>
+
+#include <Plugin/GPluginAction.h>
+#include <Plugin/GPluginContext.h>
+#include <Plugin/GPluginHost.h>
+
+class GPluginRegistry;
+
+class GPluginManager : public GPluginHost {
+  public:
+    static GPluginManager& Get();
+    ~GPluginManager() override;
+
+    void Initialize();
+    void Rescan();
+
+    const std::vector<GPluginAction>& Actions() const;
+    bool ExecuteAction(const std::string& actionId);
+
+    void SetActionChangedCallback(std::function<void()> callback);
+    void SetContextProvider(std::function<GPluginContext()> provider);
+    void SetStatusCallback(std::function<void(const std::string&)> callback);
+    void SetStatusMessage(const char* message) override;
+
+  private:
+    GPluginManager();
+    GPluginManager(const GPluginManager&) = delete;
+    GPluginManager& operator=(const GPluginManager&) = delete;
+
+    std::vector<std::string> SearchPaths() const;
+    void ScanDirectory(const std::string& path);
+    void ReportError(const std::string& message);
+
+    GPluginRegistry* fRegistry;
+    bool fInitialized;
+    std::function<void()> fActionChangedCallback;
+    std::function<GPluginContext()> fContextProvider;
+    std::function<void(const std::string&)> fStatusCallback;
+};
+
+#endif

@@ -23,6 +23,7 @@
 #include<exception>
 #include<iostream>
 #include<map>
+#include<vector>
 
 //class Histomatic;
 class GEventTimer;
@@ -73,7 +74,6 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
     //TGListTree *GetListTree() { return fGListTree; }
     GListTree *GetListTree() const { return fGListTree; }
 
-    void buttonAction();
     void SetStatusText(std::string text, int col) { fStatusBar->SetText(text.c_str(),col); }
 
   //private:
@@ -87,6 +87,8 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
     void closeAllCanvases();
 
     void doLockPads(TPad *pad=0);
+    void RefreshPluginActions();
+    Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2) override;
 
 
     //bool HandleKey(Event_t *event)       override { printf("HandleKey\n"); return false; }
@@ -111,15 +113,10 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
     //TGPopupMenu       *fMenuFile;
     //TGPopupMenu       *fMenuHelp;     
 
-    TGTextButton      *fButton1; 
-    TGTextButton      *fButton2; 
-    TGTextButton      *fButton3; 
     TGTextButton      *fButton4; 
-    
-    TGTextButton      *fButton5; 
-    TGTextButton      *fButton6; 
-    TGTextButton      *fButton7; 
     TGTextButton      *fButton8; 
+    std::vector<TGTextButton*> fPluginButtons;
+    std::map<int,std::string> fPluginButtonActions;
 
     TGHorizontalFrame *fDrawOptionContainer;
     TGButtonGroup     *fDrawOptionGroup;
@@ -183,6 +180,5 @@ class Histomatic : public TGMainFrame { //: public TQObject { //: public TGMainF
 
 
 #endif
-
 
 

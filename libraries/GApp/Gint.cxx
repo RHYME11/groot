@@ -22,6 +22,7 @@
 
 #include <globals.h>
 #include <GGlobals.h>
+#include <Plugin/GPluginManager.h>
 
 Gint *Gint::fGint = 0;
 
@@ -58,6 +59,7 @@ Gint::Gint(int argc, char **argv) : TRint("gint",0,0,0,0,true,false),
   fCalC0(0), fCalC1(1), fCalC2(0), fCalUnit("keV"), fHasCalibration(false),
   fRootFilesOpened(0), fTabLock(false), fMainThreadId(std::this_thread::get_id())  {
 
+  GPluginManager::Get().Initialize();
   LoadOptions(argc,argv);
   LoadStyle();
   SetPrompt("groot [%d] ");

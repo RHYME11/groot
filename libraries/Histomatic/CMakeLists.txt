@@ -25,5 +25,5 @@ target_link_libraries(GUI PUBLIC
   ROOT::Gui 
   GROOTLIB
   GCORE
+  GPLUGIN
 )
-

@@ -36,6 +36,34 @@ Keyboard shortcuts:
   z/l    Toggle log scale
 
 
+Optional Plugins
+
+Groot scans optional plugin manifests at startup but delays loading each shared
+library until its GUI action is selected. A plugin failure does not disable the
+rest of Groot.
+
+Set additional plugin directories with a colon-separated environment variable:
+
+  export GROOT_PLUGIN_PATH="$HOME/my-plugins:/opt/groot/plugins"
+
+Groot also checks:
+
+  $HOME/.local/lib/groot/plugins
+  $GSYS/lib/groot/plugins
+
+Each directory can contain one or more `.plugin` files in ROOT TEnv format. A
+manifest declares the plugin ID, name, version, API version, shared library, and
+one or more GUI actions. Action IDs and plugin IDs must be unique. The first
+plugin found for a duplicate plugin ID is retained.
+
+Plugin developers can use the installed `GrootPlugin` CMake package and headers
+under `include/Plugin`. API version 1 libraries export:
+
+  GrootPluginApiVersion
+  GrootCreatePlugin
+  GrootDestroyPlugin
+
+
 
 
 Interactive ROI Tool
