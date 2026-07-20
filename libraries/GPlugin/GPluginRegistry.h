@@ -23,6 +23,7 @@ class GPluginRegistry {
     GPluginRecord* FindByAction(const std::string& actionId);
     const std::vector<GPluginAction>& Actions() const;
     void ClearMetadata();
+    void Shutdown();
 
   private:
     std::map<std::string, GPluginRecord> fPlugins;

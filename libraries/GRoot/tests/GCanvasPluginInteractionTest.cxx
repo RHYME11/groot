@@ -80,5 +80,7 @@ int main() {
   manager.CloseSessionsForCanvas(&canvas);
   if(!session.closed || manager.HasActiveSession(&canvas))
     return Fail("canvas close path did not release the session");
+  manager.Shutdown();
+  manager.CloseSessionsForCanvas(&canvas);
   return 0;
 }

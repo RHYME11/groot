@@ -5,10 +5,20 @@
 // Inputs: None.
 // Outputs: None.
 GPluginRegistry::~GPluginRegistry() {
+  Shutdown();
+}
+
+// ============== GPluginRegistry::Shutdown ==============
+// Purpose: Destroy loaded plugin instances exactly once.
+// Inputs: None.
+// Outputs: Released plugin instances; libraries remain process-loaded.
+void GPluginRegistry::Shutdown() {
   for(auto& entry : fPlugins) {
     auto& plugin = entry.second.loaded;
-    if(plugin.instance && plugin.destroy)
+    if(plugin.instance && plugin.destroy) {
       plugin.destroy(plugin.instance);
+      plugin.instance = nullptr;
+    }
   }
 }
 

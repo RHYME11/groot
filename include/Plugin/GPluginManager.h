@@ -22,6 +22,7 @@ class GPluginManager : public GPluginHost {
     ~GPluginManager() override;
 
     void Initialize();
+    void Shutdown();
     void Rescan();
 
     const std::vector<GPluginAction>& Actions() const;
@@ -52,6 +53,7 @@ class GPluginManager : public GPluginHost {
     GPluginRegistry* fRegistry;
     GPluginSessionRegistry* fSessions;
     bool fInitialized;
+    bool fShutdown;
     std::function<void()> fActionChangedCallback;
     std::function<GPluginContext()> fContextProvider;
     std::function<void(const std::string&)> fStatusCallback;

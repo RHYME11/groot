@@ -41,8 +41,8 @@ void AppendSearchPath(const std::string& path,
 // Inputs: None.
 // Outputs: Singleton manager reference.
 GPluginManager& GPluginManager::Get() {
-  static GPluginManager manager;
-  return manager;
+  static GPluginManager* manager = new GPluginManager;
+  return *manager;
 }
 
 // ============== GPluginManager::GPluginManager ==============
@@ -52,7 +52,8 @@ GPluginManager& GPluginManager::Get() {
 GPluginManager::GPluginManager()
   : fRegistry(new GPluginRegistry),
     fSessions(new GPluginSessionRegistry),
-    fInitialized(false) {
+    fInitialized(false),
+    fShutdown(false) {
 }
 
 // ============== GPluginManager::~GPluginManager ==============
@@ -60,12 +61,27 @@ GPluginManager::GPluginManager()
 // Inputs: None.
 // Outputs: Released manager resources; libraries remain process-loaded.
 GPluginManager::~GPluginManager() {
+  Shutdown();
+  delete fSessions;
+  delete fRegistry;
+}
+
+// ============== GPluginManager::Shutdown ==============
+// Purpose: Close sessions and destroy plugin instances before ROOT cleanup.
+// Inputs: None.
+// Outputs: Manager enters an inert state; repeated calls are safe.
+void GPluginManager::Shutdown() {
+  if(fShutdown)
+    return;
+  fShutdown = true;
+  fActionChangedCallback = {};
+  fContextProvider = {};
+  fStatusCallback = {};
   for(const auto& record : fSessions->TakeAll()) {
     if(record.session)
       record.session->Close();
   }
-  delete fSessions;
-  delete fRegistry;
+  fRegistry->Shutdown();
 }
 
 // ============== GPluginManager::Initialize ==============
@@ -73,7 +89,7 @@ GPluginManager::~GPluginManager() {
 // Inputs: None.
 // Outputs: Populated action registry.
 void GPluginManager::Initialize() {
-  if(fInitialized)
+  if(fInitialized || fShutdown)
     return;
   fInitialized = true;
   Rescan();
@@ -84,6 +100,8 @@ void GPluginManager::Initialize() {
 // Inputs: None.
 // Outputs: Refreshed action registry and GUI notification.
 void GPluginManager::Rescan() {
+  if(fShutdown)
+    return;
   fRegistry->ClearMetadata();
   for(const auto& path : SearchPaths())
     ScanDirectory(path);
@@ -104,6 +122,8 @@ const std::vector<GPluginAction>& GPluginManager::Actions() const {
 // Inputs: Global action identifier.
 // Outputs: True when the plugin reports success.
 bool GPluginManager::ExecuteAction(const std::string& actionId) {
+  if(fShutdown)
+    return false;
   GPluginRecord* record = fRegistry->FindByAction(actionId);
   if(!record) {
     ReportError("unknown plugin action '" + actionId + "'");
@@ -184,6 +204,8 @@ void GPluginManager::SetStatusMessage(const char* message) {
 // Outputs: True when the pad was inactive and registration succeeded.
 bool GPluginManager::ActivateSession(GPluginSession* session,
                                      const GPluginContext& context) {
+  if(fShutdown)
+    return false;
   if(!session || !context.canvas || !context.pad) {
     ReportError("cannot activate a plugin session without canvas and pad");
     return false;
@@ -217,6 +239,8 @@ bool GPluginManager::ActivateSession(GPluginSession* session,
 // Inputs: Active session identity.
 // Outputs: Updated session registry.
 void GPluginManager::DeactivateSession(GPluginSession* session) {
+  if(fShutdown)
+    return;
   fSessions->Remove(session);
   SetStatusMessage("Plugin session deactivated");
 }
@@ -226,6 +250,8 @@ void GPluginManager::DeactivateSession(GPluginSession* session) {
 // Inputs: Pad identity.
 // Outputs: True when Groot interaction must be bypassed.
 bool GPluginManager::HasActiveSession(TVirtualPad* pad) const {
+  if(fShutdown)
+    return false;
   return fSessions->Contains(pad);
 }
 
@@ -234,6 +260,8 @@ bool GPluginManager::HasActiveSession(TVirtualPad* pad) const {
 // Inputs: Normalized event with ROOT's current selection.
 // Outputs: True whenever the pad has an application-overlay session.
 bool GPluginManager::NotifySession(const GPluginEvent& event) {
+  if(fShutdown)
+    return false;
   auto* record = fSessions->Find(event.context.pad);
   if(!record || !record->session)
     return false;
@@ -250,6 +278,8 @@ bool GPluginManager::NotifySession(const GPluginEvent& event) {
 // Inputs: Pad being destroyed or reset.
 // Outputs: Closed session callbacks.
 void GPluginManager::CloseSessionsForPad(TVirtualPad* pad) {
+  if(fShutdown)
+    return;
   for(const auto& record : fSessions->TakePad(pad)) {
     if(record.session)
       record.session->Close();
@@ -261,6 +291,8 @@ void GPluginManager::CloseSessionsForPad(TVirtualPad* pad) {
 // Inputs: Canvas being closed.
 // Outputs: Closed session callbacks.
 void GPluginManager::CloseSessionsForCanvas(TCanvas* canvas) {
+  if(fShutdown)
+    return;
   for(const auto& record : fSessions->TakeCanvas(canvas)) {
     if(record.session)
       record.session->Close();

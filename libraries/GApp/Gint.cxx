@@ -74,10 +74,12 @@ Gint *Gint::Get(int argc,char **argv) {
 
 Gint::~Gint() {
   StopLiveConnections();
+  GPluginManager::Get().Shutdown();
 }
 
 void Gint::Terminate(int status) {
   StopLiveConnections();
+  GPluginManager::Get().Shutdown();
   printf("\nbye,bye\n\n");
   SetPrompt("");
   TRint::Terminate(status);
