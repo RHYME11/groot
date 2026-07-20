@@ -120,7 +120,9 @@ void GCanvas::Init(const char* name, const char* title) {
   this->AddExec("groot_interact","GRootInteract()");
 
 
-  gClient->Connect("ProcessedEvent(Event_t *,Window_t)","GCanvas",this,"EventProcessed(Event_t*)");
+  if(gClient && !gROOT->IsBatch())
+    gClient->Connect("ProcessedEvent(Event_t *,Window_t)","GCanvas",this,
+                     "EventProcessed(Event_t*)");
   //GetCanvasImp()->Connect("ProcessedEvent(Event_t *,Window_t)","GCanvas",this,"EventProcessed(Event_t*)");
   //if(GetCanvasImp()->IsA() == TRootCanvas::Class())
   //  static_cast<TRootCanvas*>(GetCanvasImp())->Connect("ProcessedEvent(Event_t *,Window_t)","GCanvas",this,
@@ -217,8 +219,8 @@ void GCanvas::EventProcessed(Event_t *event) {
         GPluginEvent pluginEvent = BuildPluginEvent(
           this, pad, kArrowKeyPress, static_cast<int>(keysym),
           event->fX, event->fY, event->fState);
-        if(GPluginManager::Get().DispatchEvent(pluginEvent))
-          break;
+        if(GPluginManager::Get().NotifySession(pluginEvent))
+          return;
       }
       //printf("arrow key pressed.\n");
       //printf("keysym = 0x%08x\n",keysym);
@@ -238,13 +240,17 @@ void GCanvas::EventProcessed(Event_t *event) {
 void GCanvas::HandleInput(EEventType event, int px, int py) {
   bool handled = false;
 
+  // ROOT owns the native canvas interaction layer. Plugins observe the
+  // resulting state and only replace Groot's application-specific layer.
+  TCanvas::HandleInput(event, px, py);
+
   TVirtualPad* pluginPad = GetSelectedPad();
   if(!pluginPad)
     pluginPad = this;
   GPluginEvent pluginEvent = BuildPluginEvent(
     this, pluginPad, static_cast<int>(event),
     event == kKeyPress ? px : 0, px, py, fCurrentEvent.fState);
-  if(GPluginManager::Get().DispatchEvent(pluginEvent)) {
+  if(GPluginManager::Get().NotifySession(pluginEvent)) {
     pluginPad->Modified();
     pluginPad->Update();
     return;
@@ -262,7 +268,6 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
 
 
   if(!GetSelected()) {
-    TCanvas::HandleInput(event,px,py);
     ApplyRequestedCurrentPad(TakeRequestedCurrentPad());
     UpdateCursorForSelected(event);
     return;
@@ -283,7 +288,6 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
 
   TH1 *currentHist = GrabHist();
   if(!currentHist) {
-    TCanvas::HandleInput(event,px,py);
     ApplyRequestedCurrentPad(TakeRequestedCurrentPad());
     UpdateCursorForSelected(event);
     return;
@@ -319,9 +323,7 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
   }
   //printf(RED "handled = %i" RESET_COLOR  "\n",handled);
   }
-  if(!handled) 
-    TCanvas::HandleInput(event,px,py);
-  else 
+  if(handled)
     UpdateAllPads();
 
   ApplyRequestedCurrentPad(TakeRequestedCurrentPad());

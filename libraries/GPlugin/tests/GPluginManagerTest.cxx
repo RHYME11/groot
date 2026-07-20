@@ -15,15 +15,19 @@ int failures = 0;
 
 class MockSession : public GPluginSession {
   public:
-    bool HandleEvent(const GPluginEvent&) override {
+    const char* SessionId() const override {
+      return "mock.session";
+    }
+    void ObserveEvent(const GPluginEvent& event) override {
       ++events;
-      return true;
+      lastTarget = event.context.target;
     }
     void Close() override {
       closed = true;
     }
     int events = 0;
     bool closed = false;
+    TObject* lastTarget = nullptr;
 };
 
 // ============== Check ==============
@@ -92,6 +96,7 @@ int main(int argc, char** argv) {
   GPluginContext sessionContext;
   sessionContext.canvas = reinterpret_cast<TCanvas*>(0x1000);
   sessionContext.pad = reinterpret_cast<TVirtualPad*>(0x2000);
+  sessionContext.target = reinterpret_cast<TObject*>(0x3000);
   Check(manager.ActivateSession(&session, sessionContext),
         "first pad session should activate");
   Check(manager.HasActiveSession(sessionContext.pad),
@@ -99,13 +104,29 @@ int main(int argc, char** argv) {
   MockSession duplicateSession;
   Check(!manager.ActivateSession(&duplicateSession, sessionContext),
         "a pad must reject a second session");
+  GPluginContext duplicateTargetContext = sessionContext;
+  duplicateTargetContext.pad = reinterpret_cast<TVirtualPad*>(0x4000);
+  Check(!manager.ActivateSession(&duplicateSession, duplicateTargetContext),
+        "a target must reject a second session in another pad");
+  MockSession independentSession;
+  GPluginContext independentContext = duplicateTargetContext;
+  independentContext.target = reinterpret_cast<TObject*>(0x6000);
+  Check(manager.ActivateSession(&independentSession, independentContext),
+        "a different pad and target should allow another session");
   GPluginEvent sessionEvent;
   sessionEvent.context = sessionContext;
-  Check(manager.DispatchEvent(sessionEvent) && session.events == 1,
-        "active session should consume its event");
+  sessionEvent.context.target = reinterpret_cast<TObject*>(0x5000);
+  Check(manager.NotifySession(sessionEvent) && session.events == 1,
+        "active session should observe its event");
+  Check(session.lastTarget == sessionContext.target,
+        "session notification should retain the locked target");
   manager.CloseSessionsForPad(sessionContext.pad);
   Check(session.closed && !manager.HasActiveSession(sessionContext.pad),
         "closing a pad should close and unregister its session");
+  manager.CloseSessionsForPad(independentContext.pad);
+  Check(independentSession.closed &&
+        !manager.HasActiveSession(independentContext.pad),
+        "independent pad session should close cleanly");
 
   const auto marker = runtime / "mock-created.txt";
   setenv("GROOT_MOCK_LOAD_MARKER", marker.c_str(), 1);

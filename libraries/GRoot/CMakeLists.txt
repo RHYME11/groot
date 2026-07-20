@@ -47,3 +47,7 @@ target_link_libraries(GROOTLIB PUBLIC
   GPLUGIN
   GTOOLS
 )
+
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

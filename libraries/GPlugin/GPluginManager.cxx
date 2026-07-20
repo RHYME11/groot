@@ -179,7 +179,7 @@ void GPluginManager::SetStatusMessage(const char* message) {
 }
 
 // ============== GPluginManager::ActivateSession ==============
-// Purpose: Give one plugin exclusive interaction ownership of a pad.
+// Purpose: Register one application-overlay session for a pad and target.
 // Inputs: Plugin session and validated context.
 // Outputs: True when the pad was inactive and registration succeeded.
 bool GPluginManager::ActivateSession(GPluginSession* session,
@@ -191,9 +191,21 @@ bool GPluginManager::ActivateSession(GPluginSession* session,
   GPluginSessionRecord record;
   record.canvas = context.canvas;
   record.pad = context.pad;
+  record.target = context.target;
   record.session = session;
   if(!fSessions->Add(record)) {
-    ReportError("the selected pad already has an active plugin session");
+    std::string reason = "the selected pad already has an active plugin session";
+    GPluginSession* owner = nullptr;
+    if(auto* padRecord = fSessions->Find(context.pad))
+      owner = padRecord->session;
+    if(!fSessions->Contains(context.pad) && context.target &&
+       fSessions->ContainsTarget(context.target)) {
+      reason = "the selected target already has an active plugin session";
+      owner = fSessions->FindTarget(context.target);
+    }
+    if(owner && owner->SessionId() && owner->SessionId()[0] != '\0')
+      reason += std::string(": ") + owner->SessionId();
+    ReportError(reason);
     return false;
   }
   SetStatusMessage("Plugin session activated");
@@ -201,7 +213,7 @@ bool GPluginManager::ActivateSession(GPluginSession* session,
 }
 
 // ============== GPluginManager::DeactivateSession ==============
-// Purpose: Release one plugin session's exclusive pad ownership.
+// Purpose: Release one plugin session's pad and target ownership.
 // Inputs: Active session identity.
 // Outputs: Updated session registry.
 void GPluginManager::DeactivateSession(GPluginSession* session) {
@@ -217,15 +229,19 @@ bool GPluginManager::HasActiveSession(TVirtualPad* pad) const {
   return fSessions->Contains(pad);
 }
 
-// ============== GPluginManager::DispatchEvent ==============
-// Purpose: Deliver an input event to an exclusive pad session.
-// Inputs: Normalized plugin event.
-// Outputs: True whenever the pad is session-owned.
-bool GPluginManager::DispatchEvent(const GPluginEvent& event) {
+// ============== GPluginManager::NotifySession ==============
+// Purpose: Notify a session after ROOT has processed a native input event.
+// Inputs: Normalized event with ROOT's current selection.
+// Outputs: True whenever the pad has an application-overlay session.
+bool GPluginManager::NotifySession(const GPluginEvent& event) {
   auto* record = fSessions->Find(event.context.pad);
   if(!record || !record->session)
     return false;
-  record->session->HandleEvent(event);
+  GPluginEvent observed = event;
+  observed.context.canvas = record->canvas;
+  observed.context.pad = record->pad;
+  observed.context.target = record->target;
+  record->session->ObserveEvent(observed);
   return true;
 }
 

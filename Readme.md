@@ -23,7 +23,7 @@ A minimal manifest is:
   Plugin.Id: example
   Plugin.Name: Example Plugin
   Plugin.Version: 1.0.0
-  Plugin.ApiVersion: 2
+  Plugin.ApiVersion: 3
   Plugin.Library: libExamplePlugin.so
   Plugin.Action.Count: 1
   Plugin.Action.0.Id: example.run
@@ -35,10 +35,10 @@ loaded only when an action is first selected. Missing libraries, entry symbols,
 duplicate identifiers, and incompatible API versions are reported without
 terminating Groot.
 
-Plugin API v2 supports one exclusive session per pad. Active sessions receive
-normalized mouse/key events before Groot interaction handlers; events consumed
-by the session do not fall through to Groot hotkeys. Sessions are closed when
-their owner canvas closes.
+Plugin API v3 supports one application-overlay session per pad and target.
+ROOT native canvas interaction always runs. Active sessions observe normalized
+events after ROOT handling while Groot-specific hotkeys, markers, and cursor
+policy are suspended for that pad. Sessions close with their owner canvas.
 
 External Groot connectors compile against the public headers under
 `include/Plugin` and the `GPLUGIN` library in Groot's normal build tree.

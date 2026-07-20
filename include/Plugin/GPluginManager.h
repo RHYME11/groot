@@ -36,7 +36,7 @@ class GPluginManager : public GPluginHost {
     void DeactivateSession(GPluginSession* session) override;
 
     bool HasActiveSession(TVirtualPad* pad) const;
-    bool DispatchEvent(const GPluginEvent& event);
+    bool NotifySession(const GPluginEvent& event);
     void CloseSessionsForPad(TVirtualPad* pad);
     void CloseSessionsForCanvas(TCanvas* canvas);
 
