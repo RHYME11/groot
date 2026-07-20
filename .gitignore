@@ -3,6 +3,7 @@ build/
 wiki/
 bin/
 .agents/
+macros_root/
 
 *.o
 *.so
@@ -12,6 +13,7 @@ a.out
 *.swp
 *.log
 *.dat
+*.root
 
 .DS_Store
 .gint_history
