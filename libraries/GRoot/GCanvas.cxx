@@ -250,11 +250,8 @@ void GCanvas::HandleInput(EEventType event, int px, int py) {
   GPluginEvent pluginEvent = BuildPluginEvent(
     this, pluginPad, static_cast<int>(event),
     event == kKeyPress ? px : 0, px, py, fCurrentEvent.fState);
-  if(GPluginManager::Get().NotifySession(pluginEvent)) {
-    pluginPad->Modified();
-    pluginPad->Update();
+  if(GPluginManager::Get().NotifySession(pluginEvent))
     return;
-  }
 
   if(event==kKeyPress && px==kKey_Space) {
     if(GetSelectedPad()) {

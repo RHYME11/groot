@@ -38,7 +38,9 @@ terminating Groot.
 Plugin API v3 supports one application-overlay session per pad and target.
 ROOT native canvas interaction always runs. Active sessions observe normalized
 events after ROOT handling while Groot-specific hotkeys, markers, and cursor
-policy are suspended for that pad. Sessions close with their owner canvas.
+policy are suspended for that pad. Plugin notification does not force a pad
+redraw, preserving ROOT cursor and drag feedback. Sessions close with their
+owner canvas.
 Groot explicitly shuts down plugin sessions and instances before ROOT deletes
 remaining canvases, so canvas cleanup remains safe regardless of static object
 destruction order.
