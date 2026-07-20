@@ -23,7 +23,7 @@ A minimal manifest is:
   Plugin.Id: example
   Plugin.Name: Example Plugin
   Plugin.Version: 1.0.0
-  Plugin.ApiVersion: 3
+  Plugin.ApiVersion: 4
   Plugin.Library: libExamplePlugin.so
   Plugin.Action.Count: 1
   Plugin.Action.0.Id: example.run
@@ -35,7 +35,7 @@ loaded only when an action is first selected. Missing libraries, entry symbols,
 duplicate identifiers, and incompatible API versions are reported without
 terminating Groot.
 
-Plugin API v3 supports one application-overlay session per pad and target.
+Plugin API v4 supports one application-overlay session per pad and target.
 ROOT native canvas interaction always runs. Active sessions observe normalized
 events after ROOT handling while Groot-specific hotkeys, markers, and cursor
 policy are suspended for that pad. Plugin notification does not force a pad
@@ -44,6 +44,8 @@ owner canvas.
 Groot explicitly shuts down plugin sessions and instances before ROOT deletes
 remaining canvases, so canvas cleanup remains safe regardless of static object
 destruction order.
+Loaded plugins may also clean their own ROOT drawing artifacts when Groot's
+histogram cleanup command is invoked; cleanup never lazy-loads unused plugins.
 
 External Groot connectors compile against the public headers under
 `include/Plugin` and the `GPLUGIN` library in Groot's normal build tree.

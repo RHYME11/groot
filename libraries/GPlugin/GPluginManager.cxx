@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <set>
 #include <sstream>
@@ -158,6 +159,31 @@ bool GPluginManager::ExecuteAction(const std::string& actionId) {
   }
   SetStatusMessage(("Plugin action completed: " + actionId).c_str());
   return true;
+}
+
+// ============== GPluginManager::CleanArtifacts ==============
+// Purpose: Ask loaded plugins to remove artifacts for one ROOT context.
+// Inputs: Current canvas, pad, selection, and target.
+// Outputs: Cleanup failures are reported without interrupting other plugins.
+void GPluginManager::CleanArtifacts(const GPluginContext& context) {
+  if(fShutdown)
+    return;
+  for(GPluginRecord* record : fRegistry->LoadedPlugins()) {
+    try {
+      if(!record->loaded.instance->CleanArtifacts(context)) {
+        const char* detail = record->loaded.instance->LastError();
+        ReportError("plugin '" + record->manifest.id +
+                    "' artifact cleanup failed" +
+                    (detail && *detail ? std::string(": ") + detail : ""));
+      }
+    } catch(const std::exception& error) {
+      ReportError("plugin '" + record->manifest.id +
+                  "' artifact cleanup threw: " + error.what());
+    } catch(...) {
+      ReportError("plugin '" + record->manifest.id +
+                  "' artifact cleanup threw an unknown exception");
+    }
+  }
 }
 
 // ============== GPluginManager::SetActionChangedCallback ==============

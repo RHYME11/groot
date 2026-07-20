@@ -27,6 +27,7 @@ class GPluginManager : public GPluginHost {
 
     const std::vector<GPluginAction>& Actions() const;
     bool ExecuteAction(const std::string& actionId);
+    void CleanArtifacts(const GPluginContext& context);
 
     void SetActionChangedCallback(std::function<void()> callback);
     void SetContextProvider(std::function<GPluginContext()> provider);

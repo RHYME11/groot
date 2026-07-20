@@ -28,6 +28,14 @@ class GPluginMock : public GPlugin {
       return true;
     }
 
+    bool CleanArtifacts(const GPluginContext& context) override {
+      if(const char* marker = std::getenv("GROOT_MOCK_CLEAN_MARKER")) {
+        std::ofstream output(marker);
+        output << (context.target ? "target\n" : "no-target\n");
+      }
+      return true;
+    }
+
     const char* LastError() const override {
       return fError.c_str();
     }

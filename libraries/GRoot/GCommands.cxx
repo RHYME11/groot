@@ -685,6 +685,12 @@ bool GRootInteractHistKeyPress(TH1 *currentHist,GInteractionInfo &info) {
           GH1D *gcurrentHist = dynamic_cast<GH1D*>(currentHist);
           gcurrentHist->RemovePeaks();
         }
+        GPluginContext context;
+        context.canvas = info.pad ? info.pad->GetCanvas() : nullptr;
+        context.pad = info.pad;
+        context.selected = info.selected;
+        context.target = currentHist;
+        GPluginManager::Get().CleanArtifacts(context);
         info.modified = true;
         //gPad->Modified();
       }

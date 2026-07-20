@@ -66,6 +66,19 @@ GPluginRecord* GPluginRegistry::FindByAction(const std::string& actionId) {
   return plugin == fPlugins.end() ? nullptr : &plugin->second;
 }
 
+// ============== GPluginRegistry::LoadedPlugins ==============
+// Purpose: Return records whose shared libraries created plugin instances.
+// Inputs: None.
+// Outputs: Mutable loaded-plugin records in registry order.
+std::vector<GPluginRecord*> GPluginRegistry::LoadedPlugins() {
+  std::vector<GPluginRecord*> result;
+  for(auto& entry : fPlugins) {
+    if(entry.second.loaded.instance)
+      result.push_back(&entry.second);
+  }
+  return result;
+}
+
 // ============== GPluginRegistry::Actions ==============
 // Purpose: Return actions in manifest discovery order.
 // Inputs: None.

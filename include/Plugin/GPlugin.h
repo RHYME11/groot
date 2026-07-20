@@ -13,6 +13,9 @@ class GPlugin {
     virtual ~GPlugin() = default;
     virtual bool ExecuteAction(const char* actionId,
                                const GPluginContext& context) = 0;
+    virtual bool CleanArtifacts(const GPluginContext&) {
+      return true;
+    }
     virtual const char* LastError() const = 0;
 };
 

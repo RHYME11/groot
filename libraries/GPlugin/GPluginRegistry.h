@@ -21,6 +21,7 @@ class GPluginRegistry {
 
     bool Add(const GPluginManifestData& manifest, std::string& error);
     GPluginRecord* FindByAction(const std::string& actionId);
+    std::vector<GPluginRecord*> LoadedPlugins();
     const std::vector<GPluginAction>& Actions() const;
     void ClearMetadata();
     void Shutdown();

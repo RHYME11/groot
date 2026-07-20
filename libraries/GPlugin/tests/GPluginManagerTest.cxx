@@ -92,6 +92,14 @@ int main(int argc, char** argv) {
   manager.Initialize();
   Check(manager.Actions().empty(), "empty search path should have no actions");
 
+  const auto cleanMarker = runtime / "mock-cleaned.txt";
+  setenv("GROOT_MOCK_CLEAN_MARKER", cleanMarker.c_str(), 1);
+  GPluginContext cleanContext;
+  cleanContext.target = reinterpret_cast<TObject*>(0x7000);
+  manager.CleanArtifacts(cleanContext);
+  Check(!std::filesystem::exists(cleanMarker),
+        "cleanup must not lazy-load undiscovered plugins");
+
   MockSession session;
   GPluginContext sessionContext;
   sessionContext.canvas = reinterpret_cast<TCanvas*>(0x1000);
@@ -136,6 +144,15 @@ int main(int argc, char** argv) {
   Check(!std::filesystem::exists(marker), "plugin should remain unloaded after discovery");
   Check(manager.ExecuteAction("mock.ping"), "valid mock action should execute");
   Check(std::filesystem::exists(marker), "first execution should create plugin instance");
+  manager.CleanArtifacts(cleanContext);
+  Check(std::filesystem::exists(cleanMarker),
+        "loaded plugin should receive artifact cleanup");
+  {
+    std::ifstream input(cleanMarker);
+    std::string value;
+    std::getline(input, value);
+    Check(value == "target", "artifact cleanup should receive target context");
+  }
 
   WriteManifest(runtime / "20-duplicate-plugin.plugin", "mock",
                 validLibrary.string(), "duplicate.plugin");
