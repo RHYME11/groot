@@ -3,6 +3,9 @@ changes made to groot
 1. It can read .txt3 files
 2. It is capable of doing calibrations
 
+The Groot prompt uses ROOT's default terminal color and text weight. This can
+be customized with `Rint.PromptColor` in a user or working-directory `.gintrc`.
+
 
 Plugin support
 
