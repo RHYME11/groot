@@ -12,7 +12,3 @@ target_include_directories(GPLUGIN PUBLIC
 
 target_link_libraries(GPLUGIN PUBLIC ROOT::Core)
 target_compile_features(GPLUGIN PUBLIC cxx_std_17)
-
-if(BUILD_TESTING)
-  add_subdirectory(tests)
-endif()

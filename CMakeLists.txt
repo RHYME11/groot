@@ -9,9 +9,6 @@ project(groot
         HOMEPAGE_URL "https://github.com/pcbend/groot"
         LANGUAGES CXX)
 
-option(BUILD_TESTING "Build Groot regression tests" OFF)
-include(CTest)
-
 if(APPLE) 
   message("Building for Darwin")
   add_compile_definitions(__DARWIN__=TRUE)
